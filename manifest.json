@@ -3,7 +3,7 @@
     "name": "Ai Summary For Articles",
     "version": "1.0",
     "description": "This extension summarizes articles using AI.",
-    "permissions": ["activeTab", "storage","scripting"],
+    "permissions": ["activeTab", "storage", "scripting"],
     "action": {
         "default_popup": "popup.html",
         "default_icon": "icon.png"
