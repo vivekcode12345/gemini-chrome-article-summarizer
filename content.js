@@ -5,7 +5,61 @@ function cleanText(text) {
     .trim();
 }
 
+function removeNoiseElements() {
+  // Remove common noise elements before extraction
+  const noiseSelectors = [
+    // Cookie banners
+    '[id*="cookie"]',
+    '[class*="cookie"]',
+    '[id*="consent"]',
+    '[class*="consent"]',
+    '[id*="gdpr"]',
+    '[class*="gdpr"]',
+    // Navigation
+    'nav',
+    'header',
+    'footer',
+    '[role="navigation"]',
+    '[role="banner"]',
+    '[role="contentinfo"]',
+    // Ads
+    '[id*="ad-"]',
+    '[class*="ad-"]',
+    '[id*="ads-"]',
+    '[class*="ads-"]',
+    '[id*="advertisement"]',
+    '[class*="advertisement"]',
+    // Comments
+    '[id*="comment"]',
+    '[class*="comment"]',
+    '[id*="disqus"]',
+    '[class*="disqus"]',
+    // Sidebars
+    'aside',
+    '[id*="sidebar"]',
+    '[class*="sidebar"]',
+    '[id*="related"]',
+    '[class*="related"]',
+    // Social media
+    '[id*="social"]',
+    '[class*="social"]',
+    '[id*="share"]',
+    '[class*="share"]'
+  ];
+
+  noiseSelectors.forEach(selector => {
+    try {
+      document.querySelectorAll(selector).forEach(el => el.remove());
+    } catch (e) {
+      // Ignore errors
+    }
+  });
+}
+
 function getArticleText() {
+  // Remove noise elements first
+  removeNoiseElements();
+
   // Try <article> tag first
   const article = document.querySelector("article");
   if (article) {
@@ -38,7 +92,7 @@ function getArticleText() {
     }
   }
 
-  // Collect paragraphs
+  // Collect paragraphs (filter out short ones)
   const paragraphs = [...document.querySelectorAll("p")]
     .map((p) => cleanText(p.innerText))
     .filter((t) => t.length > 40);
