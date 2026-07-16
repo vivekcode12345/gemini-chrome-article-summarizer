@@ -1,58 +1,75 @@
-function getArticleText() {
-  // Try to find article element first
-  const article = document.querySelector("article");
-  if (article && article.innerText.trim().length > 100) {
-    return article.innerText.trim();
-  }
-
-  // Try common article/content selectors
-  const contentSelectors = [
-    'article',
-    '[role="main"]',
-    '.post-content',
-    '.article-content',
-    '.entry-content',
-    '.content',
-    '#content',
-    'main',
-    '.main-content'
-  ];
-
-  for (const selector of contentSelectors) {
-    const element = document.querySelector(selector);
-    if (element && element.innerText.trim().length > 100) {
-      return element.innerText.trim();
-    }
-  }
-
-  // Fallback: Get all paragraphs and filter out short ones
-  const paragraphs = Array.from(document.querySelectorAll("p"))
-    .map(p => p.innerText.trim())
-    .filter(text => text.length > 50) // Filter out very short paragraphs
-    .join("\n\n");
-
-  if (paragraphs.length > 100) {
-    return paragraphs;
-  }
-
-  // Last resort: Get all text from the body, excluding scripts and styles
-  const bodyText = Array.from(document.body.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, td, th"))
-    .map(el => el.innerText.trim())
-    .filter(text => text.length > 30)
-    .join("\n\n");
-
-  return bodyText || "";
+function cleanText(text) {
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/\n+/g, "\n")
+    .trim();
 }
 
-chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
-  if (req.type === "GET_ARTICLE_TEXT") {
-    try {
-      const text = getArticleText();
-      sendResponse({ text: text || "" });
-    } catch (error) {
-      console.error("Error extracting article text:", error);
-      sendResponse({ text: "" });
+function getArticleText() {
+  // Try <article> tag first
+  const article = document.querySelector("article");
+  if (article) {
+    const text = cleanText(article.innerText);
+    if (text.length > 300) return text;
+  }
+
+  // Common article selectors
+  const selectors = [
+    "main",
+    "[role='main']",
+    ".article-content",
+    ".article-body",
+    ".post-content",
+    ".entry-content",
+    ".story-content",
+    ".content",
+    "#content",
+    ".main-content"
+  ];
+
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+
+    if (element) {
+      const text = cleanText(element.innerText);
+      if (text.length > 300) {
+        return text;
+      }
     }
   }
-  return true; // Keep the message channel open for async response
+
+  // Collect paragraphs
+  const paragraphs = [...document.querySelectorAll("p")]
+    .map((p) => cleanText(p.innerText))
+    .filter((t) => t.length > 40);
+
+  if (paragraphs.length > 5) {
+    return paragraphs.join("\n\n");
+  }
+
+  return cleanText(document.body.innerText);
+}
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "GET_ARTICLE_TEXT") {
+    try {
+      const text = getArticleText();
+
+      sendResponse({
+        success: true,
+        text: text
+      });
+
+    } catch (err) {
+      console.error(err);
+
+      sendResponse({
+        success: false,
+        text: "",
+        error: err.message
+      });
+    }
+
+    return true;
+  }
 });

@@ -1,31 +1,35 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // Load saved API key if it exists
+  const apiKeyInput = document.getElementById("api-key");
+  const saveButton = document.getElementById("save-button");
+  const successMessage = document.getElementById("success-message");
+
+  // Load saved API key
   chrome.storage.sync.get(["geminiApiKey"], (result) => {
     if (result.geminiApiKey) {
-      document.getElementById("api-key").value = result.geminiApiKey;
+      apiKeyInput.value = result.geminiApiKey;
     }
   });
 
-  // Save API key when button is clicked
-  document.getElementById("save-button").addEventListener("click", () => {
-    const apiKey = document.getElementById("api-key").value.trim();
+  // Save API key
+  saveButton.addEventListener("click", () => {
+    const apiKey = apiKeyInput.value.trim();
 
-    if (apiKey) {
-      chrome.storage.sync.set({ geminiApiKey: apiKey }, () => {
-        const successMessage = document.getElementById("success-message");
+    if (!apiKey) {
+      alert("Please enter your Gemini API Key.");
+      return;
+    }
+
+    chrome.storage.sync.set(
+      {
+        geminiApiKey: apiKey,
+      },
+      () => {
         successMessage.style.display = "block";
 
-        // Close the tab after a short delay to show the success message
         setTimeout(() => {
-          window.close();
-          // For cases where window.close() doesn't work 
-          chrome.tabs.getCurrent((tab) => {
-            if (tab) {
-              chrome.tabs.remove(tab.id);
-            }
-          });
-        }, 1000);
-      });
-    }
+          successMessage.style.display = "none";
+        }, 2000);
+      }
+    );
   });
 });
