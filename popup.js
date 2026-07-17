@@ -113,19 +113,15 @@ ${article}`;
   const data = await response.json();
 
   console.log("Gemini Response:", data);
-
+  
   if (!response.ok) {
-    const errorMsg = data.error?.message || "Gemini API Error";
-    
-    // Handle specific error cases
-    if (errorMsg.includes("API key")) {
-      throw new Error("Invalid API key. Please check your Gemini API key in options.");
-    }
-    if (errorMsg.includes("quota") || errorMsg.includes("rate limit")) {
-      throw new Error("API quota exceeded. Please try again later.");
-    }
-    
-    throw new Error(errorMsg);
+  console.error("Full Gemini Error:", data);
+
+  throw new Error(
+    data.error?.message ||
+    JSON.stringify(data.error) ||
+    "Unknown Gemini API Error"
+  );
   }
 
   if (
