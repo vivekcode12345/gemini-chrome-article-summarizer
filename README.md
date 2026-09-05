@@ -67,7 +67,7 @@ AI-ARTICLE-SUMMARIZER/
 ## Technologies Used
 
 - **Chrome Extension API** (Manifest V3)
-- **Google Gemini AI** (gemini-1.5-flash model)
+- **Google Gemini AI** (gemini-3.6-flash model)
 - **Vanilla JavaScript** (no frameworks required)
 
 ## API Key

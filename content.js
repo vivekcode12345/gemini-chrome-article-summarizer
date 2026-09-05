@@ -427,26 +427,30 @@ function postProcessText(text) {
 
 // ==================== MESSAGE LISTENER ====================
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === "GET_ARTICLE_TEXT") {
-    try {
-      const text = getArticleText();
+if (!window.__AI_ARTICLE_SUMMARIZER_LOADED__) {
+  window.__AI_ARTICLE_SUMMARIZER_LOADED__ = true;
+
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.type === "GET_ARTICLE_TEXT") {
+      try {
+        const text = getArticleText();
+        
+        sendResponse({
+          success: true,
+          text: text
+        });
+        
+      } catch (err) {
+        console.error("Error extracting article text:", err);
+        
+        sendResponse({
+          success: false,
+          text: "",
+          error: err.message
+        });
+      }
       
-      sendResponse({
-        success: true,
-        text: text
-      });
-      
-    } catch (err) {
-      console.error("Error extracting article text:", err);
-      
-      sendResponse({
-        success: false,
-        text: "",
-        error: err.message
-      });
+      return true; // Keep message channel open for async response
     }
-    
-    return true; // Keep message channel open for async response
-  }
-});
+  });
+}

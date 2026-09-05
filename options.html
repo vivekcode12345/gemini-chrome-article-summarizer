@@ -1,69 +1,455 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>AI Summary Settings</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        padding: 20px;
-        max-width: 600px;
-        margin: 0 auto;
-      }
-      h1 {
-        color: #4285f4;
-      }
-      .form-group {
-        margin-bottom: 20px;
-      }
-      label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: bold;
-      }
-      input[type="text"] {
-        width: 100%;
-        padding: 8px;
-        box-sizing: border-box;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
-      button {
-        background-color: #4285f4;
-        color: white;
-        border: none;
-        padding: 10px 15px;
-        border-radius: 4px;
-        cursor: pointer;
-      }
-      button:hover {
-        background-color: #3367d6;
-      }
-      .success-message {
-        color: green;
-        margin-top: 10px;
-        display: none;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>AI Summary Settings</h1>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings • AI Article Summary</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --border: #e2e8f0;
+      --border-focus: #3b82f6;
+      --success: #10b981;
+      --success-bg: #ecfdf5;
+      --warning: #f59e0b;
+      --warning-bg: #fffbeb;
+      --danger: #ef4444;
+      --danger-bg: #fef2f2;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.08);
+    }
 
+    /* System Dark Mode Theme */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b0f19;
+        --card-bg: #111827;
+        --text-main: #f9fafb;
+        --text-muted: #9ca3af;
+        --primary: #3b82f6;
+        --primary-hover: #2563eb;
+        --border: #1f2937;
+        --border-focus: #60a5fa;
+        --success: #34d399;
+        --success-bg: rgba(16, 185, 129, 0.15);
+        --warning: #fbbf24;
+        --warning-bg: rgba(245, 158, 11, 0.15);
+        --danger: #f87171;
+        --danger-bg: rgba(239, 68, 68, 0.15);
+        --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+      padding: 40px 20px;
+      max-width: 600px;
+      margin: 0 auto;
+      color: var(--text-main);
+      background-color: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .settings-container {
+      background: var(--card-bg);
+      padding: 32px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 24px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 3px 10px rgba(37, 99, 235, 0.3);
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--text-main);
+    }
+
+    .header-text p {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Form Section */
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    label {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-main);
+    }
+
+    .key-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+    }
+
+    .key-badge.saved {
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
+
+    .key-badge.missing {
+      background: var(--warning-bg);
+      color: var(--warning);
+      border: 1px solid var(--warning);
+    }
+
+    .input-wrapper {
+      display: flex;
+      position: relative;
+      align-items: center;
+    }
+
+    .input-wrapper input {
+      width: 100%;
+      padding: 11px 44px 11px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      color: var(--text-main);
+      background: var(--card-bg);
+      transition: all 0.18s ease;
+    }
+
+    .input-wrapper input:focus {
+      border-color: var(--border-focus);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .toggle-btn {
+      position: absolute;
+      right: 10px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 6px;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.15s;
+    }
+
+    .toggle-btn:hover {
+      background-color: var(--border);
+      color: var(--text-main);
+    }
+
+    .helper-box {
+      margin-top: 10px;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .helper-box a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .helper-box a:hover {
+      text-decoration: underline;
+    }
+
+    /* Test Connection Button */
+    .connection-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg);
+      border-color: var(--border-focus);
+    }
+
+    .test-feedback {
+      font-size: 12.5px;
+      font-weight: 500;
+    }
+
+    .test-feedback.success { color: var(--success); }
+    .test-feedback.error { color: var(--danger); }
+
+    /* Preference Cards */
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .option-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      background: var(--card-bg);
+      text-align: center;
+      user-select: none;
+    }
+
+    .option-card:hover {
+      border-color: var(--border-focus);
+      background: var(--bg);
+    }
+
+    .option-card.selected {
+      border-color: var(--primary);
+      background: var(--bg);
+      box-shadow: 0 0 0 1.5px var(--primary);
+    }
+
+    .option-card input {
+      display: none;
+    }
+
+    .option-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 3px;
+    }
+
+    .option-card.selected .option-title {
+      color: var(--primary);
+    }
+
+    .option-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* Actions */
+    .actions-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-save {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      border: none;
+      padding: 11px 24px;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+      transition: all 0.18s ease;
+    }
+
+    .btn-save:hover {
+      background: linear-gradient(135deg, #1d4ed8, #1e40af);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .btn-save:active {
+      transform: translateY(0);
+    }
+
+    .toast-message {
+      color: #065f46;
+      background-color: var(--success-bg);
+      border: 1px solid #a7f3d0;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="settings-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-badge">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </div>
+      <div class="header-text">
+        <h1>Settings</h1>
+        <p>Configure Gemini AI API and summarization preferences</p>
+      </div>
+    </header>
+
+    <!-- Section 1: API Key -->
     <div class="form-group">
-      <label for="api-key">Gemini API Key:</label>
-      <input type="text" id="api-key" placeholder="Enter your Gemini API key" />
-      <p>
-        You can get an API key from
-        <a href="https://makersuite.google.com/app/apikey" target="_blank"
-          >Google AI Studio</a
+      <div class="label-row">
+        <label for="api-key">Gemini API Key</label>
+        <span id="key-status-badge" class="key-badge missing">○ No Key Saved</span>
+      </div>
+      <div class="input-wrapper">
+        <input
+          type="password"
+          id="api-key"
+          placeholder="Paste your Gemini API key here"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button
+          type="button"
+          id="toggle-visibility"
+          class="toggle-btn"
+          title="Show / Hide API key"
+          aria-label="Toggle API key visibility"
         >
-      </p>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
+      </div>
+
+      <div class="connection-row">
+        <button type="button" id="test-connection-btn" class="btn-secondary">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          Test Connection
+        </button>
+        <span id="test-feedback" class="test-feedback"></span>
+      </div>
+
+      <div class="helper-box">
+        Need an API key? You can get one from
+        <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>.
+      </div>
     </div>
 
-    <button id="save-button">Save Settings</button>
-    <p id="success-message" class="success-message">
-      Settings saved successfully!
-    </p>
+    <!-- Section 2: Default Format Preference -->
+    <div class="form-group">
+      <div class="label-row">
+        <label>Default Summary Format</label>
+      </div>
+      <div class="options-grid">
+        <div class="option-card selected" data-value="brief">
+          <input type="radio" name="default-type" value="brief" checked />
+          <div class="option-title">⚡ Brief</div>
+          <div class="option-sub">2-3 Sentences</div>
+        </div>
+        <div class="option-card" data-value="detailed">
+          <input type="radio" name="default-type" value="detailed" />
+          <div class="option-title">📝 Detailed</div>
+          <div class="option-sub">Deep-dive</div>
+        </div>
+        <div class="option-card" data-value="bullets">
+          <input type="radio" name="default-type" value="bullets" />
+          <div class="option-title">📌 Key Points</div>
+          <div class="option-sub">Bullet Points</div>
+        </div>
+      </div>
+    </div>
 
-    <script src="options.js"></script>
-  </body>
+    <!-- Actions -->
+    <div class="actions-footer">
+      <div id="success-message" class="toast-message">
+        ✓ Settings saved successfully!
+      </div>
+      <button id="save-button" class="btn-save">Save Settings</button>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
 </html>

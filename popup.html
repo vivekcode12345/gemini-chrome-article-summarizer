@@ -1,140 +1,792 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Summary</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Article Summary</title>
 
-<style>
-body{
-    width:420px;
-    padding:15px;
-    font-family:Arial,Helvetica,sans-serif;
-    background:#f5f5f5;
-}
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-subtle: #94a3b8;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-subtle: #eff6ff;
+      --border: #e2e8f0;
+      --border-focus: #3b82f6;
+      --success: #10b981;
+      --success-bg: #ecfdf5;
+      --warning: #f59e0b;
+      --warning-bg: #fffbeb;
+      --danger: #ef4444;
+      --danger-bg: #fef2f2;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+      --skeleton-start: #f1f5f9;
+      --skeleton-mid: #e2e8f0;
+      --code-bg: #f1f5f9;
+      --code-text: #be123c;
+    }
 
-h2{
-    text-align:center;
-    margin-bottom:15px;
-}
+    /* System Dark Mode Theme */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b0f19;
+        --card-bg: #111827;
+        --text-main: #f9fafb;
+        --text-muted: #9ca3af;
+        --text-subtle: #6b7280;
+        --primary: #3b82f6;
+        --primary-hover: #2563eb;
+        --primary-subtle: rgba(59, 130, 246, 0.15);
+        --border: #1f2937;
+        --border-focus: #60a5fa;
+        --success: #34d399;
+        --success-bg: rgba(16, 185, 129, 0.15);
+        --warning: #fbbf24;
+        --warning-bg: rgba(245, 158, 11, 0.15);
+        --danger: #f87171;
+        --danger-bg: rgba(239, 68, 68, 0.15);
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.4);
+        --skeleton-start: #1f2937;
+        --skeleton-mid: #374151;
+        --code-bg: #1f2937;
+        --code-text: #f43f5e;
+      }
+    }
 
-select,
-button{
-    width:100%;
-    padding:10px;
-    margin-top:10px;
-    border-radius:6px;
-    border:none;
-    font-size:15px;
-}
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-button{
-    cursor:pointer;
-    background:#4285f4;
-    color:white;
-    font-weight:bold;
-}
+    body {
+      width: 440px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+      transition: background 0.2s, color 0.2s;
+    }
 
-button:hover{
-    background:#1a73e8;
-}
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
 
-#copy-btn{
-    background:#34a853;
-}
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
 
-#copy-btn:hover{
-    background:#2d8d46;
-}
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+      color: white;
+      flex-shrink: 0;
+    }
 
-#result{
-    margin-top:15px;
-    padding:15px;
-    min-height:180px;
-    max-height:400px;
-    overflow-y:auto;
-    background:white;
-    border-radius:8px;
-    border:1px solid #e0e0e0;
-    white-space:pre-wrap;
-    line-height:1.6;
-    font-size:14px;
-    color:#333;
-    box-shadow:0 2px 4px rgba(0,0,0,0.1);
-}
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      color: var(--text-main);
+    }
 
-.loader{
-    display:flex;
-    flex-direction:column;
-    justify-content:center;
-    align-items:center;
-    padding:20px;
-    color:#666;
-}
+    .header-badges {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-.spinner{
-    width:40px;
-    height:40px;
-    border:4px solid #f3f3f3;
-    border-top:4px solid #4285f4;
-    border-radius:50%;
-    animation:spin 1s linear infinite;
-    margin-bottom:10px;
-}
+    .model-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+      background: var(--primary-subtle);
+      color: var(--primary);
+      border: 1px solid var(--border);
+    }
 
-@keyframes spin{
-    0%{transform:rotate(0deg);}
-    100%{transform:rotate(360deg);}
-}
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+    }
 
-.loader-text{
-    font-size:13px;
-    color:#666;
-    margin-top:8px;
-}
+    .icon-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: all 0.15s ease;
+    }
 
-#result strong{
-    color:#d32f2f;
-    font-size:15px;
-}
+    .icon-btn:hover {
+      background: var(--card-bg);
+      border-color: var(--border);
+      color: var(--text-main);
+      box-shadow: var(--shadow-sm);
+    }
 
-#result small{
-    color:#666;
-    line-height:1.5;
-}
+    .icon-btn:focus-visible {
+      outline: 2px solid var(--border-focus);
+    }
 
-#result em{
-    color:#4285f4;
-    font-style:normal;
-    font-weight:500;
-}
-</style>
+    /* Page Context Bar */
+    .context-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 11px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
 
+    .tab-favicon {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .tab-fallback-icon {
+      flex-shrink: 0;
+      color: var(--primary);
+    }
+
+    .context-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 500;
+      color: var(--text-main);
+      flex: 1;
+    }
+
+    /* Segmented Control (Tabs) */
+    .segmented-control {
+      display: flex;
+      background: var(--border);
+      padding: 3px;
+      border-radius: var(--radius-md);
+      margin-bottom: 12px;
+      gap: 3px;
+    }
+
+    .segment-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .segment-btn:hover:not(.active) {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .segment-btn.active {
+      background: var(--card-bg);
+      color: var(--primary);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+
+    .segment-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Primary Summarize Button */
+    .btn-summarize {
+      width: 100%;
+      padding: 11px 16px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+      transition: all 0.18s ease;
+      margin-bottom: 14px;
+    }
+
+    .btn-summarize:hover {
+      background: linear-gradient(135deg, #1d4ed8, #1e40af);
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-summarize:active {
+      transform: translateY(0);
+    }
+
+    .btn-summarize:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .shortcut-kbd {
+      font-size: 10.5px;
+      padding: 2px 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      font-family: inherit;
+      letter-spacing: 0.5px;
+      margin-left: 4px;
+      transition: opacity 0.2s;
+    }
+
+    /* Result Card */
+    .result-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Result Toolbar */
+    .result-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .meta-tags {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .meta-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 500;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--text-main);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-action:hover {
+      background: var(--border);
+    }
+
+    .btn-action .icon-check {
+      display: none;
+    }
+
+    .btn-action.copied {
+      background: var(--success-bg);
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .btn-action.copied .icon-copy {
+      display: none;
+    }
+
+    .btn-action.copied .icon-check {
+      display: inline-block;
+    }
+
+    .btn-action-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-action-icon:hover {
+      background: var(--border);
+      color: var(--text-main);
+    }
+
+    /* Scrollable Result View */
+    #result {
+      padding: 16px;
+      min-height: 180px;
+      max-height: 380px;
+      overflow-y: auto;
+      line-height: 1.65;
+      font-size: 13.5px;
+      color: var(--text-main);
+      user-select: text;
+    }
+
+    /* Custom Scrollbar */
+    #result::-webkit-scrollbar {
+      width: 6px;
+    }
+    #result::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #result::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 10px;
+    }
+    #result::-webkit-scrollbar-thumb:hover {
+      background: var(--text-subtle);
+    }
+
+    /* Smooth Fade-in animation for summary content */
+    @keyframes summaryFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .summary-content {
+      animation: summaryFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Empty State */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 38px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--primary-subtle);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .empty-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .empty-desc {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      max-width: 280px;
+    }
+
+    /* Shimmer Skeleton Loader */
+    .loader-container {
+      padding: 10px 4px;
+    }
+
+    .loader-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--primary);
+      margin-bottom: 18px;
+    }
+
+    .mini-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(59, 130, 246, 0.2);
+      border-top: 2px solid var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .skeleton-line {
+      height: 13px;
+      background: linear-gradient(90deg, var(--skeleton-start) 25%, var(--skeleton-mid) 50%, var(--skeleton-start) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 4px;
+      margin-bottom: 11px;
+    }
+
+    .skeleton-line.short { width: 45%; }
+    .skeleton-line.medium { width: 75%; }
+    .skeleton-line.full { width: 100%; }
+
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Notice / Error Card */
+    .alert-card {
+      text-align: center;
+      padding: 24px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .alert-icon-wrapper {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .alert-icon-wrapper.warning {
+      background: var(--warning-bg);
+      color: var(--warning);
+    }
+
+    .alert-icon-wrapper.danger {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .alert-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text-main);
+    }
+
+    .alert-desc {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+
+    .btn-alert {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-alert:hover {
+      background: var(--primary-hover);
+    }
+
+    /* Markdown Formatted Typography */
+    .summary-heading {
+      color: var(--primary);
+      font-size: 14.5px;
+      font-weight: 700;
+      margin: 14px 0 6px 0;
+      letter-spacing: -0.1px;
+    }
+
+    .summary-heading:first-child {
+      margin-top: 0;
+    }
+
+    .summary-para {
+      margin: 0 0 10px 0;
+      line-height: 1.65;
+    }
+
+    .summary-para:last-child {
+      margin-bottom: 0;
+    }
+
+    .summary-list {
+      margin: 6px 0 12px 0;
+      padding-left: 20px;
+    }
+
+    .summary-list li {
+      margin-bottom: 7px;
+      line-height: 1.55;
+    }
+
+    .summary-list li:last-child {
+      margin-bottom: 0;
+    }
+
+    .summary-quote {
+      margin: 10px 0;
+      padding: 8px 14px;
+      border-left: 3px solid var(--primary);
+      background: var(--bg);
+      color: var(--text-muted);
+      font-style: italic;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+
+    .summary-pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      margin: 8px 0 12px 0;
+      overflow-x: auto;
+      font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      color: var(--text-main);
+    }
+
+    #result strong {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    #result em {
+      color: var(--primary);
+      font-style: italic;
+    }
+
+    #result code {
+      background: var(--code-bg);
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      color: var(--code-text);
+    }
+  </style>
 </head>
 
 <body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+      </div>
+      <h1 class="brand-title">AI Article Summary</h1>
+    </div>
+    <div class="header-badges">
+      <span class="model-badge">
+        <span class="status-dot"></span>
+        Gemini 3.6 Flash
+      </span>
+      <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
 
-<h2>🤖 AI Article Summary</h2>
+  <!-- Page Context Bar -->
+  <div class="context-bar" id="context-bar">
+    <img id="tab-favicon" class="tab-favicon" src="" alt="" style="display: none;" />
+    <svg id="tab-fallback-icon" class="tab-fallback-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+      <polyline points="14 2 14 8 20 8"></polyline>
+      <line x1="16" y1="13" x2="8" y2="13"></line>
+      <line x1="16" y1="17" x2="8" y2="17"></line>
+      <polyline points="10 9 9 9 8 9"></polyline>
+    </svg>
+    <span class="context-title" id="tab-title">Loading active tab...</span>
+  </div>
 
-<select id="summary-type">
-    <option value="brief">Brief Summary</option>
-    <option value="detailed">Detailed Summary</option>
-    <option value="bullets">Bullet Points</option>
-</select>
+  <!-- Segmented Control for Summary Types -->
+  <div class="segmented-control" role="tablist">
+    <button type="button" class="segment-btn active" data-type="brief" role="tab" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+      </svg>
+      <span>Brief</span>
+    </button>
+    <button type="button" class="segment-btn" data-type="detailed" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="21" y1="10" x2="3" y2="10"></line>
+        <line x1="21" y1="6" x2="3" y2="6"></line>
+        <line x1="21" y1="14" x2="3" y2="14"></line>
+        <line x1="21" y1="18" x2="3" y2="18"></line>
+      </svg>
+      <span>Detailed</span>
+    </button>
+    <button type="button" class="segment-btn" data-type="bullets" role="tab" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"></line>
+        <line x1="8" y1="12" x2="21" y2="12"></line>
+        <line x1="8" y1="18" x2="21" y2="18"></line>
+        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+      </svg>
+      <span>Key Points</span>
+    </button>
+  </div>
+  <input type="hidden" id="summary-type" value="brief" />
 
-<button id="summarize">
-Summarize This Page
-</button>
+  <!-- Summarize Trigger Button -->
+  <button id="summarize" class="btn-summarize">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+    </svg>
+    <span id="summarize-btn-label">Summarize Article</span>
+    <kbd class="shortcut-kbd">⌘↵</kbd>
+  </button>
 
-<button id="copy-btn">
-Copy Summary
-</button>
+  <!-- Result Container -->
+  <div class="result-container">
+    <!-- Result Toolbar (hidden until summary exists) -->
+    <div class="result-toolbar" id="result-toolbar" style="display: none;">
+      <div class="meta-tags">
+        <span class="meta-tag" id="word-count-tag">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 7 4 4 20 4 20 7"></polyline>
+            <line x1="9" y1="20" x2="15" y2="20"></line>
+            <line x1="12" y1="4" x2="12" y2="20"></line>
+          </svg>
+          <span id="word-count">0 words</span>
+        </span>
+      </div>
+      <div class="toolbar-actions">
+        <button id="copy-btn" class="btn-action" title="Copy to clipboard">
+          <svg class="icon-copy" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <svg class="icon-check" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          <span id="copy-label">Copy</span>
+        </button>
+        <button id="clear-btn" class="btn-action-icon" title="Clear and reset">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
 
-<div id="result">
-Click on <b>Summarize This Page</b> to generate the summary.
-</div>
+    <!-- Main Output View -->
+    <div id="result">
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
+        </div>
+        <div class="empty-title">Ready to summarize</div>
+        <div class="empty-desc">
+          Click <strong>Summarize Article</strong> or press <strong>⌘↵</strong> to generate an instant AI synthesis of this page.
+        </div>
+      </div>
+    </div>
+  </div>
 
-<script src="popup.js"></script>
-
+  <script src="popup.js"></script>
 </body>
 </html>
