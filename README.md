@@ -1,107 +1,147 @@
-# AI Article Summarizer
+<div align="center">
 
-A Chrome extension that uses Google's Gemini AI to summarize web articles instantly. Get brief, detailed, or bullet-point summaries of any article with a single click.
+# AI Summary for Articles
+
+**A Chrome extension that leverages Google's Gemini AI to instantly summarize any article on the web.**
+
+Choose between brief, detailed, or bullet-point summaries — generated with a single click, directly from your browser toolbar.
+
+</div>
+
+---
+
+## Overview
+
+AI Summary for Articles is a lightweight, Manifest V3 Chrome extension that extracts readable text from any web page and sends it to Google's Gemini API to produce a concise, structured summary. It is built with vanilla JavaScript, requires no build tools, and is fully open source under the MIT License.
 
 ## Features
 
-- **Multiple Summary Types**: Choose between brief summaries, detailed summaries, or bullet-point key points
-- **Smart Text Extraction**: Automatically extracts article content from various website layouts
-- **One-Click Copy**: Easily copy summaries to your clipboard
-- **Custom API Key**: Use your own Gemini API key for unlimited summaries
-- **Works Everywhere**: Compatible with most article-based websites, blogs, and documentation
+- **Multiple Summary Modes** — Brief (2–3 sentences), Detailed (comprehensive), or Bullet Points (5–7 key takeaways).
+- **Intelligent Text Extraction** — Falls back through semantic HTML, common content containers, and heuristic paragraph filtering to find article content.
+- **Bring Your Own API Key** — Your Gemini API key is stored locally in Chrome's storage. Nothing is sent to a third party.
+- **One-Click Copy** — Instantly copy any summary to your clipboard.
+- **Modern & Secure** — Built on Manifest V3 using service workers and minimal permissions.
+
+## Demo
+
+> _Add a screenshot or short GIF of the popup and a generated summary here to showcase the extension in action._
 
 ## Installation
 
-### From Source (Developer Mode)
+### Option A — From Source (Recommended for Development)
 
-1. Clone or download this repository
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable "Developer mode" (toggle in the top right corner)
-4. Click "Load unpacked" and select the extension directory
-5. The extension icon should appear in your Chrome toolbar
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/vivekcode12345/gemini-chrome-article-summarizer.git
+   ```
+2. Open Chrome and navigate to `chrome://extensions/`.
+3. Enable **Developer mode** using the toggle in the top-right corner.
+4. Click **Load unpacked** and select the cloned project directory.
+5. The **AI Summary for Articles** icon will appear in your Chrome toolbar.
 
-### Setup
+### Option B — From the Chrome Web Store
 
-1. Click the extension icon in your Chrome toolbar
-2. Click the "Options" button or right-click the extension icon and select "Options"
-3. Enter your Gemini API key (get one from [Google AI Studio](https://makersuite.google.com/app/apikey))
-4. Save the API key
+> _Link to the published extension once available._
+
+## Configuration
+
+1. Click the extension icon and choose **Options** (or right-click the icon → *Options*).
+2. Generate a free API key at [Google AI Studio](https://makersuite.google.com/app/apikey).
+3. Paste the key into the options page and click **Save**.
+
+Your key is stored locally via `chrome.storage.local` and is never transmitted outside of Google's Gemini API.
 
 ## Usage
 
-1. Navigate to any article or webpage you want to summarize
-2. Click the extension icon in your Chrome toolbar
-3. Select your preferred summary type from the dropdown:
-   - **Brief Summary**: 2-3 sentence overview
-   - **Detailed Summary**: Comprehensive summary covering all main points
-   - **Bullet Points**: 5-7 key insights in bullet format
-4. Click "Summarize This Page"
-5. Wait for the AI to generate the summary
-6. Click "Copy Summary" to copy the result to your clipboard
+1. Open any article, blog post, or documentation page.
+2. Click the extension icon in your toolbar.
+3. Select your preferred summary mode.
+4. Click **Summarize This Page**.
+5. Click **Copy Summary** to copy the result.
 
 ## Project Structure
 
 ```
-AI-ARTICLE-SUMMARIZER/
-├── content.js          # Content script that extracts article text from web pages
-├── popup.js            # Popup script that handles UI interactions and API calls
+gemini-chrome-article-summarizer/
+├── manifest.json       # Extension manifest (Manifest V3)
+├── background.js       # Service worker
+├── content.js          # Content script for article extraction
 ├── popup.html          # Popup UI markup
-├── options.js          # Options page script for API key management
+├── popup.js            # Popup logic and Gemini API calls
 ├── options.html        # Options page markup
-├── background.js       # Service worker for background tasks
-├── manifest.json       # Chrome extension manifest (Manifest V3)
+├── options.js          # Options page logic and API key validation
 ├── icon.png            # Extension icon
-└── README.md           # This file
+└── README.md
 ```
 
 ## How It Works
 
-1. **Content Extraction**: When you click "Summarize This Page", the extension injects `content.js` into the current tab
-2. **Text Parsing**: The content script intelligently extracts article text using multiple strategies:
-   - Looks for semantic HTML elements (`<article>`, `<main>`, etc.)
-   - Checks common content class names (`.post-content`, `.article-content`, etc.)
-   - Falls back to paragraph extraction with smart filtering
-3. **API Integration**: The extracted text is sent to Google's Gemini API with a carefully crafted prompt
-4. **Summary Display**: The AI-generated summary is displayed in the popup
+1. **Text Extraction** — The content script identifies the main article content using a layered strategy:
+   - Semantic elements (`<article>`, `<main>`)
+   - Common content class names (`.post-content`, `.article-body`, etc.)
+   - Paragraph-density heuristics as a final fallback
+2. **Prompt Construction** — The extracted text is combined with a mode-specific prompt.
+3. **Summarization** — A request is made to the Gemini API (`gemini-3.6-flash`).
+4. **Display** — The response is rendered in the popup with a one-click copy action.
 
-## Technologies Used
+## Tech Stack
 
-- **Chrome Extension API** (Manifest V3)
-- **Google Gemini AI** (gemini-3.6-flash model)
-- **Vanilla JavaScript** (no frameworks required)
+| Layer            | Technology                      |
+| ---------------- | ------------------------------- |
+| Extension Type   | Chrome Extension (Manifest V3)  |
+| Language         | JavaScript (ES2020+) — no build step |
+| AI Backend      | Google Gemini API (`gemini-3.6-flash`) |
+| Storage         | `chrome.storage.local`          |
 
-## API Key
+## Privacy
 
-This extension requires a Gemini API key from Google AI Studio:
-- Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
-- Sign in with your Google account
-- Create a new API key
-- Paste the key in the extension options
+- Your API key never leaves your browser except to authenticate with Google's Gemini API.
+- Article text is sent directly from your browser to Google — there is no intermediary.
+- No analytics, no telemetry, no third-party tracking.
 
 ## Troubleshooting
 
-### "Could not extract article text from this page"
+**"Could not extract article text from this page"**
+- Refresh the page and try again.
+- The page may be primarily video/image content with no readable text.
+- Open DevTools (`F12`) and check the console for additional details.
 
-This error occurs when the extension cannot find readable content on the page. Try:
-- Refreshing the page and trying again
-- Checking if the page has actual article content (not just videos or images)
-- Opening the browser console (F12) to check for errors
+**Summary is not generating**
+- Verify your API key is correctly entered in the options page.
+- Confirm your internet connection is active.
+- Ensure you have not exceeded the Gemini API free-tier quota.
+- Reload the extension from `chrome://extensions/`.
 
-### Summary is not generating
+## Roadmap
 
-- Verify your API key is correctly entered in the options
-- Check your internet connection
-- Ensure you haven't exceeded your Gemini API quota
-- Try refreshing the extension in `chrome://extensions/`
+- [ ] Support for selecting arbitrary page text as input
+- [ ] Custom summary length control
+- [ ] Multi-language summaries
+- [ ] Optional caching of recent summaries
+- [ ] Publish to the Chrome Web Store
 
 ## Contributing
 
-Feel free to submit issues and enhancement requests!
+Contributions are welcome. Please open an issue first to discuss what you would like to change, then submit a pull request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-MIT License - feel free to use this project for personal or commercial purposes.
+Distributed under the **MIT License**. See `LICENSE` for more information.
 
 ## Disclaimer
 
-This extension uses Google's Gemini AI API. Please review Google's terms of service and privacy policy. The extension author is not responsible for API usage costs or data privacy.
+This project is not affiliated with Google. Use of the Gemini API is subject to [Google's Terms of Service](https://policies.google.com/terms). You are responsible for any API usage costs incurred through your own API key.
+
+---
+
+<div align="center">
+
+Made with care by [vivekcode12345](https://github.com/vivekcode12345)
+
+</div>
