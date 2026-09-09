@@ -1,0 +1,20 @@
+{
+  "name": "ai-article-summarizer",
+  "version": "1.0.0",
+  "description": "Chrome Manifest V3 extension that extracts article text and generates AI-powered summaries using Google Gemini.",
+  "main": "background.js",
+  "scripts": {
+    "lint": "echo \"No linter configured\" && exit 0",
+    "test": "echo \"No tests configured\" && exit 0",
+    "package": "zip -r dist/ai-article-summarizer.zip manifest.json background.js content.js popup.html popup.js options.html options.js icon.png README.md"
+  },
+  "keywords": [
+    "chrome-extension",
+    "manifest-v3",
+    "gemini",
+    "summarizer",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT"
+}

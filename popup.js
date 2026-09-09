@@ -1,5 +1,18 @@
+import { getProvider, getSummaryFromProvider, streamSummaryFromProvider } from "./providers.js";
+import {
+  saveHistoryItem,
+  loadHistory,
+  loadFavorites,
+  toggleFavorite,
+  deleteHistoryItem,
+  clearHistory,
+} from "./history.js";
+
 // State
 let currentSummaryRaw = "";
+let currentHistoryItemId = null;
+let currentHistoryFilter = "all";
+let isHistoryPanelOpen = false;
 
 // Escape HTML for XSS safety
 function escapeHtml(text) {
@@ -132,6 +145,235 @@ function renderMarkdown(md) {
   return `<div class="summary-content">${html.join("")}</div>`;
 }
 
+// Show streaming placeholder in the result area
+function showStreamingPlaceholder(providerLabel) {
+  const resultToolbar = document.getElementById("result-toolbar");
+  if (resultToolbar) resultToolbar.style.display = "none";
+
+  const summarizeBtn = document.getElementById("summarize");
+  if (summarizeBtn) summarizeBtn.disabled = true;
+
+  const resultDiv = document.getElementById("result");
+  resultDiv.innerHTML = `
+    <div class="streaming-container">
+      <div class="streaming-header">
+        <div class="mini-spinner"></div>
+        <span>Generating with ${escapeHtml(providerLabel)}...</span>
+      </div>
+      <div id="streaming-content" class="streaming-content"></div>
+    </div>
+  `;
+}
+
+function appendStreamChunk(chunk) {
+  const container = document.getElementById("streaming-content");
+  if (!container) return;
+  const existing = container.getAttribute("data-raw") || "";
+  const combined = existing + chunk;
+  container.setAttribute("data-raw", combined);
+  container.innerHTML = renderMarkdown(combined);
+  const resultDiv = document.getElementById("result");
+  if (resultDiv) resultDiv.scrollTop = resultDiv.scrollHeight;
+}
+
+function finalizeStream(providerLabel) {
+  const container = document.getElementById("streaming-content");
+  const raw = container?.getAttribute("data-raw") || "";
+  currentSummaryRaw = raw;
+  const resultDiv = document.getElementById("result");
+  if (resultDiv) resultDiv.innerHTML = renderMarkdown(raw);
+
+  const words = raw.trim().split(/\s+/).filter(Boolean).length;
+  const readingTime = Math.max(1, Math.ceil(words / 180));
+  const wordCountEl = document.getElementById("word-count");
+  if (wordCountEl) {
+    wordCountEl.textContent = `${words} words (~${readingTime} min read)`;
+  }
+
+  const resultToolbar = document.getElementById("result-toolbar");
+  if (resultToolbar) resultToolbar.style.display = "flex";
+}
+
+function formatDate(timestamp) {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+function truncateText(text, maxLength = 120) {
+  if (!text) return "";
+  const cleaned = text.replace(/\n+/g, " ").trim();
+  if (cleaned.length <= maxLength) return cleaned;
+  return cleaned.slice(0, maxLength).trim() + "...";
+}
+
+async function renderHistoryList() {
+  const historyList = document.getElementById("history-list");
+  if (!historyList) return;
+
+  let items = await loadHistory();
+  if (currentHistoryFilter === "favorites") {
+    items = items.filter((item) => item.isFavorite);
+  }
+
+  if (!items.length) {
+    historyList.innerHTML = `<div class="history-empty">No summaries yet.</div>`;
+    return;
+  }
+
+  historyList.innerHTML = items
+    .map((item) => {
+      const domain = (() => {
+        try {
+          return new URL(item.url).hostname.replace(/^www\./, "");
+        } catch {
+          return "";
+        }
+      })();
+      const dateLabel = formatDate(item.createdAt);
+      const favClass = item.isFavorite ? "fav-active" : "";
+      const starLabel = item.isFavorite ? "Remove from favorites" : "Add to favorites";
+
+      return `
+        <div class="history-item" data-id="${item.id}">
+          <div class="history-item-header">
+            <div class="history-item-title">${escapeHtml(item.title || "Untitled")}</div>
+            <button class="history-item-btn ${favClass}" data-action="fav" data-id="${item.id}" title="${starLabel}">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="${item.isFavorite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+            </button>
+          </div>
+          <div class="history-item-meta">
+            ${domain ? `<span>${escapeHtml(domain)}</span>` : ""}
+            <span>${escapeHtml(item.mode || "brief")}</span>
+            <span>${dateLabel}</span>
+          </div>
+          <div class="history-item-summary">${escapeHtml(truncateText(item.summary))}</div>
+          <div class="history-item-actions">
+            <button class="history-item-btn" data-action="open" data-id="${item.id}">Open</button>
+            <button class="history-item-btn" data-action="delete" data-id="${item.id}">Delete</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  historyList.querySelectorAll(".history-item-btn[data-action='fav']").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-id");
+      const updated = await toggleFavorite(id);
+      await renderHistoryList();
+      await updateFavoriteButtonState(updated);
+    });
+  });
+
+  historyList.querySelectorAll(".history-item-btn[data-action='open']").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-id");
+      const history = await loadHistory();
+      const item = history.find((entry) => entry.id === id);
+      if (item) {
+        await openHistoryItem(item);
+      }
+    });
+  });
+
+  historyList.querySelectorAll(".history-item-btn[data-action='delete']").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-id");
+      await deleteHistoryItem(id);
+      if (currentHistoryItemId === id) {
+        currentHistoryItemId = null;
+      }
+      await renderHistoryList();
+      updateFavoriteButtonStateFromId(currentHistoryItemId);
+    });
+  });
+
+  historyList.querySelectorAll(".history-item").forEach((el) => {
+    el.addEventListener("click", async () => {
+      const id = el.getAttribute("data-id");
+      const history = await loadHistory();
+      const item = history.find((entry) => entry.id === id);
+      if (item) {
+        await openHistoryItem(item);
+      }
+    });
+  });
+}
+
+async function openHistoryItem(item) {
+  currentSummaryRaw = item.summary;
+  currentHistoryItemId = item.id;
+  const resultDiv = document.getElementById("result");
+  if (resultDiv) {
+    resultDiv.innerHTML = renderMarkdown(item.summary);
+  }
+  const words = item.summary.trim().split(/\s+/).filter(Boolean).length;
+  const readingTime = Math.max(1, Math.ceil(words / 180));
+  const wordCountEl = document.getElementById("word-count");
+  if (wordCountEl) {
+    wordCountEl.textContent = `${words} words (~${readingTime} min read)`;
+  }
+  const resultToolbar = document.getElementById("result-toolbar");
+  if (resultToolbar) resultToolbar.style.display = "flex";
+  await updateFavoriteButtonState(item);
+  if (isHistoryPanelOpen) {
+    toggleHistoryPanel();
+  }
+}
+
+async function updateFavoriteButtonState(item) {
+  const favBtn = document.getElementById("fav-btn");
+  const favLabel = document.getElementById("fav-label");
+  if (!favBtn) return;
+  if (item?.isFavorite) {
+    favBtn.classList.add("favorited");
+    if (favLabel) favLabel.textContent = "Favorited";
+  } else {
+    favBtn.classList.remove("favorited");
+    if (favLabel) favLabel.textContent = "Favorite";
+  }
+}
+
+async function updateFavoriteButtonStateFromId(id) {
+  if (!id) {
+    await updateFavoriteButtonState({ isFavorite: false });
+    return;
+  }
+  const history = await loadHistory();
+  const item = history.find((entry) => entry.id === id);
+  await updateFavoriteButtonState(item || { isFavorite: false });
+}
+
+async function toggleHistoryPanel() {
+  const panel = document.getElementById("history-panel");
+  const historyBtn = document.getElementById("history-btn");
+  if (!panel) return;
+
+  isHistoryPanelOpen = !isHistoryPanelOpen;
+  if (isHistoryPanelOpen) {
+    panel.style.display = "flex";
+    if (historyBtn) historyBtn.classList.add("active");
+    await renderHistoryList();
+  } else {
+    panel.style.display = "none";
+    if (historyBtn) historyBtn.classList.remove("active");
+  }
+}
+
 // Show shimmer skeleton loading state
 function showLoading(status = "Analyzing with Gemini 3.6 Flash...") {
   const resultToolbar = document.getElementById("result-toolbar");
@@ -194,7 +436,7 @@ function showApiKeyMissing() {
         </svg>
       </div>
       <div class="alert-title">API Key Required</div>
-      <div class="alert-desc">Please enter your Gemini API key in Settings to summarize articles.</div>
+      <div class="alert-desc">Please enter your API key in Settings to summarize articles.</div>
       <button id="open-settings-inline" class="btn-alert">Open Settings</button>
     </div>
   `;
@@ -255,95 +497,6 @@ async function getArticleTextFromTab(tabId) {
   }
 }
 
-// Call Gemini API and get summary
-async function getGeminiSummary(text, summaryType, apiKey) {
-  const maxLength = 30000;
-  const article =
-    text.length > maxLength
-      ? text.substring(0, maxLength) + "..."
-      : text;
-
-  let prompt = "";
-
-  switch (summaryType) {
-    case "brief":
-      prompt = `You are a professional summarizer. Write a concise summary of the following article in exactly 2-3 clear sentences. Capture the primary thesis and key takeaway. You may use **bold** text for key concepts.
-
-Article:
-${article}`;
-      break;
-
-    case "detailed":
-      prompt = `You are a professional summarizer. Write a comprehensive summary of the following article in 250-400 words. Organize the summary into well-structured paragraphs with clear section headings (###) and use **bold** text for important takeaways, terms, or metrics. Cover all key arguments and context.
-
-Article:
-${article}`;
-      break;
-
-    case "bullets":
-      prompt = `You are a professional summarizer. Summarize the following article into 5-7 key takeaway bullet points. Format each point starting with "- " and use **bold** for the core concept at the start of each bullet point.
-
-Article:
-${article}`;
-      break;
-
-    default:
-      prompt = `You are a professional summarizer. Summarize the following article in clear, natural language with markdown formatting where appropriate.
-
-Article:
-${article}`;
-  }
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 2048,
-          topP: 0.95,
-          topK: 40,
-        },
-      }),
-    }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    console.error("Gemini API Error Response:", data);
-    throw new Error(
-      data.error?.message ||
-      JSON.stringify(data.error) ||
-      "Unknown Gemini API Error"
-    );
-  }
-
-  if (
-    data.candidates &&
-    data.candidates.length &&
-    data.candidates[0].content &&
-    data.candidates[0].content.parts &&
-    data.candidates[0].content.parts.length
-  ) {
-    return data.candidates[0].content.parts[0].text.trim();
-  }
-
-  throw new Error("No summary returned by Gemini.");
-}
 
 // Copy summary to clipboard
 async function copySummaryToClipboard() {
@@ -415,6 +568,26 @@ async function initApp() {
   const summaryTypeInput = document.getElementById("summary-type");
   const settingsBtn = document.getElementById("settings-btn");
   const segmentBtns = document.querySelectorAll(".segment-btn");
+  const modelBadge = document.querySelector(".model-badge");
+
+  let currentProviderId = "gemini";
+  let currentProviderLabel = "Gemini 3.6 Flash";
+
+  async function loadProviderMeta() {
+    const storage = await new Promise((resolve) => {
+      chrome.storage.sync.get(["aiProvider"], resolve);
+    });
+    const providerId = storage.aiProvider || "gemini";
+    currentProviderId = providerId;
+    const provider = getProvider(providerId);
+    currentProviderLabel = `${provider.label} ${provider.defaultModel}`;
+    if (modelBadge) modelBadge.innerHTML = `<span class="status-dot"></span>${currentProviderLabel}`;
+  }
+
+  loadProviderMeta();
+  chrome.storage.sync.onChanged.addListener((changes) => {
+    if (changes.aiProvider) loadProviderMeta();
+  });
 
   // Populate active tab context
   initTabContext();
@@ -497,17 +670,18 @@ async function initApp() {
     if (shortcutKbd) shortcutKbd.style.opacity = "0.3";
 
     try {
-      // Fetch API key from storage
       const storage = await new Promise((resolve) => {
-        chrome.storage.sync.get(["geminiApiKey"], resolve);
+        chrome.storage.sync.get(["geminiApiKey", "openaiApiKey", "anthropicApiKey", "aiProvider"], resolve);
       });
+      const providerId = storage.aiProvider || "gemini";
+      const provider = getProvider(providerId);
+      const apiKey = storage[provider.apiKeyStorageKey];
 
-      if (!storage.geminiApiKey) {
+      if (!apiKey) {
         showApiKeyMissing();
         return;
       }
 
-      // Query active tab
       const tabs = await new Promise((resolve) => {
         chrome.tabs.query({ active: true, currentWindow: true }, resolve);
       });
@@ -519,7 +693,6 @@ async function initApp() {
 
       const activeTab = tabs[0];
 
-      // Block restricted pages
       if (
         activeTab.url &&
         (activeTab.url.startsWith("chrome://") ||
@@ -531,29 +704,46 @@ async function initApp() {
         return;
       }
 
-      // 1. Extract
-      showLoading("Extracting article text...");
+      showLoading(`Extracting article text...`);
       const articleText = await getArticleTextFromTab(activeTab.id);
 
-      // 2. Generate
-      showLoading("Generating summary with Gemini 3.6 Flash...");
       const currentType = summaryTypeInput ? summaryTypeInput.value : "brief";
-      const summary = await getGeminiSummary(articleText, currentType, storage.geminiApiKey);
+      showStreamingPlaceholder(provider.label);
 
-      // 3. Render Output
-      currentSummaryRaw = summary;
-      resultDiv.innerHTML = renderMarkdown(summary);
-
-      // 4. Update Word Count & Reading Time in Toolbar
-      const words = summary.trim().split(/\s+/).filter(Boolean).length;
-      const readingTime = Math.max(1, Math.ceil(words / 180));
-      const wordCountEl = document.getElementById("word-count");
-      if (wordCountEl) {
-        wordCountEl.textContent = `${words} words (~${readingTime} min read)`;
+      let fullText = "";
+      try {
+        for await (const chunk of streamSummaryFromProvider(articleText, currentType, providerId, apiKey)) {
+          fullText += chunk;
+          appendStreamChunk(chunk);
+        }
+      } catch (streamError) {
+        console.error("Streaming failed, falling back to non-streaming:", streamError);
+        try {
+          fullText = await getSummaryFromProvider(articleText, currentType, providerId, apiKey);
+        } catch (fallbackError) {
+          throw fallbackError;
+        }
       }
 
-      const resultToolbar = document.getElementById("result-toolbar");
-      if (resultToolbar) resultToolbar.style.display = "flex";
+      if (!fullText.trim()) {
+        throw new Error("No summary returned by provider.");
+      }
+
+      finalizeStream(provider.label);
+
+      const tabsForHistory = await new Promise((resolve) => {
+        chrome.tabs.query({ active: true, currentWindow: true }, resolve);
+      });
+      const activeTabForHistory = tabsForHistory[0];
+      const savedItem = await saveHistoryItem({
+        url: activeTabForHistory?.url || "",
+        title: activeTabForHistory?.title || "",
+        summary: currentSummaryRaw,
+        mode: currentType,
+        providerLabel: provider.label,
+      });
+      currentHistoryItemId = savedItem.id;
+      await updateFavoriteButtonState(savedItem);
 
     } catch (error) {
       console.error("Summarization error:", error);
@@ -567,6 +757,51 @@ async function initApp() {
 
   // Copy button handler
   copyBtn?.addEventListener("click", copySummaryToClipboard);
+
+  // Favorite button handler
+  const favBtn = document.getElementById("fav-btn");
+  favBtn?.addEventListener("click", async () => {
+    if (!currentSummaryRaw || !currentHistoryItemId) return;
+    const updated = await toggleFavorite(currentHistoryItemId);
+    await updateFavoriteButtonState(updated);
+    if (isHistoryPanelOpen) {
+      await renderHistoryList();
+    }
+  });
+
+  // History button handler
+  const historyBtn = document.getElementById("history-btn");
+  historyBtn?.addEventListener("click", async () => {
+    await toggleHistoryPanel();
+  });
+
+  // History filters
+  const historyAllBtn = document.getElementById("history-fav-filter");
+  const historyFavBtn = document.getElementById("history-fav-filter-fav");
+  const clearHistoryBtn = document.getElementById("clear-history-btn");
+
+  historyAllBtn?.addEventListener("click", async () => {
+    currentHistoryFilter = "all";
+    historyAllBtn.classList.add("active");
+    if (historyFavBtn) historyFavBtn.classList.remove("active");
+    await renderHistoryList();
+  });
+
+  historyFavBtn?.addEventListener("click", async () => {
+    currentHistoryFilter = "favorites";
+    historyFavBtn.classList.add("active");
+    if (historyAllBtn) historyAllBtn.classList.remove("active");
+    await renderHistoryList();
+  });
+
+  clearHistoryBtn?.addEventListener("click", async () => {
+    if (confirm("Clear all history and favorites?")) {
+      await clearHistory();
+      currentHistoryItemId = null;
+      await updateFavoriteButtonState({ isFavorite: false });
+      await renderHistoryList();
+    }
+  });
 }
 
 // Initialize when DOM is ready

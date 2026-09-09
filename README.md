@@ -18,7 +18,11 @@ AI Summary for Articles is a lightweight, Manifest V3 Chrome extension that extr
 
 - **Multiple Summary Modes** — Brief (2–3 sentences), Detailed (comprehensive), or Bullet Points (5–7 key takeaways).
 - **Intelligent Text Extraction** — Falls back through semantic HTML, common content containers, and heuristic paragraph filtering to find article content.
-- **Bring Your Own API Key** — Your Gemini API key is stored locally in Chrome's storage. Nothing is sent to a third party.
+- **Multi-Provider AI** — Choose between Google Gemini, OpenAI, or Anthropic. Provider, model, and API key are configured in Settings.
+- **Streaming Responses** — Real-time token streaming for supported providers with live markdown rendering in the popup.
+- **Global Shortcut** — Press `Ctrl+Shift+S` / `Cmd+Shift+S` from any tab to summarize without opening the popup. Results appear in a Chrome notification.
+- **History + Favorites** — Automatically saves summaries locally. Bookmark favorites and browse past summaries from the popup history panel.
+- **Bring Your Own API Key** — Your API key is stored locally in Chrome's storage. Nothing is sent to a third party.
 - **One-Click Copy** — Instantly copy any summary to your clipboard.
 - **Modern & Secure** — Built on Manifest V3 using service workers and minimal permissions.
 
@@ -46,28 +50,32 @@ AI Summary for Articles is a lightweight, Manifest V3 Chrome extension that extr
 ## Configuration
 
 1. Click the extension icon and choose **Options** (or right-click the icon → *Options*).
-2. Generate a free API key at [Google AI Studio](https://makersuite.google.com/app/apikey).
-3. Paste the key into the options page and click **Save**.
+2. Under **AI Provider**, choose Google Gemini, OpenAI, or Anthropic.
+3. Paste the corresponding API key into the key field and click **Save**.
 
-Your key is stored locally via `chrome.storage.local` and is never transmitted outside of Google's Gemini API.
+Your key is stored locally via `chrome.storage.sync` and is never transmitted outside of your chosen provider's API.
 
 ## Usage
 
 1. Open any article, blog post, or documentation page.
 2. Click the extension icon in your toolbar.
 3. Select your preferred summary mode.
-4. Click **Summarize This Page**.
+4. Click **Summarize Article**.
 5. Click **Copy Summary** to copy the result.
+
+**Global shortcut:** Press `Ctrl+Shift+S` (Windows/Linux) or `Cmd+Shift+S` (Mac) from any page to summarize the active tab instantly. The result is delivered as a Chrome notification.
 
 ## Project Structure
 
 ```
 gemini-chrome-article-summarizer/
 ├── manifest.json       # Extension manifest (Manifest V3)
-├── background.js       # Service worker
+├── background.js       # Service worker with commands + streaming support
+├── providers.js        # Multi-provider abstraction layer
+├── history.js          # History + favorites persistence layer
 ├── content.js          # Content script for article extraction
 ├── popup.html          # Popup UI markup
-├── popup.js            # Popup logic and Gemini API calls
+├── popup.js            # Popup logic, streaming renderer, history UI
 ├── options.html        # Options page markup
 ├── options.js          # Options page logic and API key validation
 ├── icon.png            # Extension icon
@@ -81,8 +89,10 @@ gemini-chrome-article-summarizer/
    - Common content class names (`.post-content`, `.article-body`, etc.)
    - Paragraph-density heuristics as a final fallback
 2. **Prompt Construction** — The extracted text is combined with a mode-specific prompt.
-3. **Summarization** — A request is made to the Gemini API (`gemini-3.6-flash`).
-4. **Display** — The response is rendered in the popup with a one-click copy action.
+3. **Provider Dispatch** — The configured provider adapter builds the correct API request format and headers for Gemini, OpenAI, or Anthropic.
+4. **Streaming / Display** — For streaming-capable providers, tokens are rendered live in the popup. The final summary is shown with word count and a one-click copy action.
+5. **History + Favorites** — Each summary is saved locally with URL, title, timestamp, mode, and provider. Users can bookmark favorites and browse past summaries in a dedicated history panel.
+6. **Global Shortcut** — When triggered via `Ctrl+Shift+S` / `Cmd+Shift+S`, the background service worker extracts text, calls the provider, and delivers the result as a Chrome notification.
 
 ## Tech Stack
 
@@ -90,8 +100,8 @@ gemini-chrome-article-summarizer/
 | ---------------- | ------------------------------- |
 | Extension Type   | Chrome Extension (Manifest V3)  |
 | Language         | JavaScript (ES2020+) — no build step |
-| AI Backend      | Google Gemini API (`gemini-3.6-flash`) |
-| Storage         | `chrome.storage.local`          |
+| AI Backend      | Pluggable provider layer: Google Gemini, OpenAI, Anthropic |
+| Storage         | `chrome.storage.sync` / `chrome.storage.local` |
 
 ## Privacy
 
@@ -107,17 +117,20 @@ gemini-chrome-article-summarizer/
 - Open DevTools (`F12`) and check the console for additional details.
 
 **Summary is not generating**
-- Verify your API key is correctly entered in the options page.
+- Verify your API key is correctly entered in the options page for the selected provider.
 - Confirm your internet connection is active.
-- Ensure you have not exceeded the Gemini API free-tier quota.
+- Ensure you have not exceeded the provider API free-tier or rate limits.
 - Reload the extension from `chrome://extensions/`.
 
 ## Roadmap
 
+- [x] Multi-provider AI support (Gemini, OpenAI, Anthropic)
+- [x] Streaming responses
+- [x] Global keyboard shortcut
+- [x] History + Favorites
 - [ ] Support for selecting arbitrary page text as input
 - [ ] Custom summary length control
 - [ ] Multi-language summaries
-- [ ] Optional caching of recent summaries
 - [ ] Publish to the Chrome Web Store
 
 ## Contributing

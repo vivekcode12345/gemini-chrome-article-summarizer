@@ -372,10 +372,34 @@
       </div>
     </header>
 
+    <!-- Section 0: AI Provider -->
+    <div class="form-group">
+      <div class="label-row">
+        <label>AI Provider</label>
+      </div>
+      <div class="options-grid" id="provider-grid">
+        <div class="option-card selected" data-value="gemini">
+          <input type="radio" name="ai-provider" value="gemini" checked />
+          <div class="option-title">Google Gemini</div>
+          <div class="option-sub">gemini-3.6-flash</div>
+        </div>
+        <div class="option-card" data-value="openai">
+          <input type="radio" name="ai-provider" value="openai" />
+          <div class="option-title">OpenAI</div>
+          <div class="option-sub">gpt-4o-mini</div>
+        </div>
+        <div class="option-card" data-value="anthropic">
+          <input type="radio" name="ai-provider" value="anthropic" />
+          <div class="option-title">Anthropic</div>
+          <div class="option-sub">claude-3-5-haiku</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Section 1: API Key -->
     <div class="form-group">
       <div class="label-row">
-        <label for="api-key">Gemini API Key</label>
+        <label id="api-key-label" for="api-key">Gemini API Key</label>
         <span id="key-status-badge" class="key-badge missing">○ No Key Saved</span>
       </div>
       <div class="input-wrapper">
@@ -411,7 +435,7 @@
         <span id="test-feedback" class="test-feedback"></span>
       </div>
 
-      <div class="helper-box">
+      <div class="helper-box" id="api-key-helper">
         Need an API key? You can get one from
         <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>.
       </div>
@@ -450,6 +474,7 @@
     </div>
   </div>
 
-  <script src="options.js"></script>
+  <script type="module" src="providers.js"></script>
+  <script type="module" src="options.js"></script>
 </body>
 </html>

@@ -1,3 +1,5 @@
+import { getProvider } from "./providers.js";
+
 document.addEventListener("DOMContentLoaded", () => {
   const apiKeyInput = document.getElementById("api-key");
   const saveButton = document.getElementById("save-button");
@@ -6,11 +8,32 @@ document.addEventListener("DOMContentLoaded", () => {
   const keyStatusBadge = document.getElementById("key-status-badge");
   const testConnBtn = document.getElementById("test-connection-btn");
   const testFeedback = document.getElementById("test-feedback");
+  const apiKeyLabel = document.getElementById("api-key-label");
+  const apiKeyHelper = document.getElementById("api-key-helper");
   const optionCards = document.querySelectorAll(".option-card");
+  const providerCards = document.querySelectorAll('#provider-grid .option-card');
 
+  let selectedProvider = "gemini";
   let selectedFormat = "brief";
 
-  // Update status badge
+  const PROVIDER_HELPERS = {
+    gemini: {
+      label: "Gemini API Key",
+      helper: 'Need an API key? You can get one from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>.',
+      placeholder: "Paste your Gemini API key here",
+    },
+    openai: {
+      label: "OpenAI API Key",
+      helper: 'Need an API key? You can get one from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a>.',
+      placeholder: "Paste your OpenAI API key here",
+    },
+    anthropic: {
+      label: "Anthropic API Key",
+      helper: 'Need an API key? You can get one from <a href="https://console.anthropic.com/settings/keys" target="_blank">Anthropic Console</a>.',
+      placeholder: "Paste your Anthropic API key here",
+    },
+  };
+
   function updateBadge(hasKey) {
     if (!keyStatusBadge) return;
     if (hasKey) {
@@ -20,6 +43,46 @@ document.addEventListener("DOMContentLoaded", () => {
       keyStatusBadge.textContent = "○ No Key Saved";
       keyStatusBadge.className = "key-badge missing";
     }
+  }
+
+  function applyProviderMeta(providerId) {
+    const meta = PROVIDER_HELPERS[providerId] || PROVIDER_HELPERS.gemini;
+    if (apiKeyLabel) apiKeyLabel.textContent = meta.label;
+    if (apiKeyHelper) apiKeyHelper.innerHTML = meta.helper;
+    if (apiKeyInput) apiKeyInput.placeholder = meta.placeholder;
+  }
+
+  function selectProvider(providerId) {
+    selectedProvider = providerId;
+    providerCards.forEach((card) => {
+      const isSelected = card.getAttribute("data-value") === providerId;
+      card.classList.toggle("selected", isSelected);
+      const radio = card.querySelector("input[type='radio']");
+      if (radio) radio.checked = isSelected;
+    });
+    applyProviderMeta(providerId);
+    loadApiKeyForProvider(providerId);
+  }
+
+  providerCards.forEach((card) => {
+    card.addEventListener("click", () => {
+      selectProvider(card.getAttribute("data-value"));
+    });
+  });
+
+  function getStorageKeyForProvider(providerId) {
+    if (providerId === "openai") return "openaiApiKey";
+    if (providerId === "anthropic") return "anthropicApiKey";
+    return "geminiApiKey";
+  }
+
+  function loadApiKeyForProvider(providerId) {
+    const storageKey = getStorageKeyForProvider(providerId);
+    chrome.storage.sync.get([storageKey], (result) => {
+      const value = result[storageKey];
+      if (apiKeyInput) apiKeyInput.value = value || "";
+      updateBadge(!!value);
+    });
   }
 
   // Toggle API key visibility with SVG icons
@@ -41,9 +104,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Default summary format card selection
-  optionCards.forEach((card) => {
+  const formatCards = Array.from(optionCards).filter((card) => !providerCards.includes(card));
+  formatCards.forEach((card) => {
     card.addEventListener("click", () => {
-      optionCards.forEach((c) => c.classList.remove("selected"));
+      formatCards.forEach((c) => c.classList.remove("selected"));
       card.classList.add("selected");
       const radio = card.querySelector("input[type='radio']");
       if (radio) radio.checked = true;
@@ -52,25 +116,28 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Load saved settings
-  chrome.storage.sync.get(["geminiApiKey", "defaultSummaryType"], (result) => {
-    if (result.geminiApiKey) {
-      apiKeyInput.value = result.geminiApiKey;
-      updateBadge(true);
-    } else {
-      updateBadge(false);
-    }
+  chrome.storage.sync.get(
+    ["geminiApiKey", "openaiApiKey", "anthropicApiKey", "defaultSummaryType", "aiProvider"],
+    (result) => {
+      if (result.aiProvider) {
+        selectedProvider = result.aiProvider;
+      }
+      selectProvider(selectedProvider);
 
-    if (result.defaultSummaryType) {
-      selectedFormat = result.defaultSummaryType;
-      const targetCard = document.querySelector(`.option-card[data-value="${selectedFormat}"]`);
-      if (targetCard) {
-        optionCards.forEach((c) => c.classList.remove("selected"));
-        targetCard.classList.add("selected");
-        const radio = targetCard.querySelector("input[type='radio']");
-        if (radio) radio.checked = true;
+      if (result.defaultSummaryType) {
+        selectedFormat = result.defaultSummaryType;
+        const targetCard = document.querySelector(`.option-card[data-value="${selectedFormat}"]:not(#provider-grid .option-card)`);
+        if (targetCard) {
+          optionCards.forEach((c) => {
+            if (!providerCards.contains(c)) c.classList.remove("selected");
+          });
+          targetCard.classList.add("selected");
+          const radio = targetCard.querySelector("input[type='radio']");
+          if (radio) radio.checked = true;
+        }
       }
     }
-  });
+  );
 
   // Test Connection
   testConnBtn?.addEventListener("click", async () => {
@@ -87,17 +154,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const startTime = Date.now();
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: "ping" }] }],
-            generationConfig: { maxOutputTokens: 1 },
-          }),
-        }
-      );
+      const provider = getProvider(selectedProvider);
+      const endpoint = provider.buildEndpoint(provider.defaultModel, key);
+      const body = provider.buildRequest("ping", provider.defaultModel);
+      const headers = {
+        "Content-Type": "application/json",
+        ...(provider.needsAuthHeader ? provider.authHeader(key) : {}),
+      };
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
 
       const latency = Date.now() - startTime;
       const data = await res.json();
@@ -121,27 +190,28 @@ document.addEventListener("DOMContentLoaded", () => {
   // Save settings
   function saveSettings() {
     const apiKey = apiKeyInput.value.trim();
+    const storageKey = getStorageKeyForProvider(selectedProvider);
 
     if (!apiKey) {
-      alert("Please enter a valid Gemini API Key.");
+      alert(`Please enter a valid ${PROVIDER_HELPERS[selectedProvider].label}.`);
       return;
     }
 
-    chrome.storage.sync.set(
-      {
-        geminiApiKey: apiKey,
-        defaultSummaryType: selectedFormat,
-      },
-      () => {
-        updateBadge(true);
-        if (successMessage) {
-          successMessage.style.display = "inline-flex";
-          setTimeout(() => {
-            successMessage.style.display = "none";
-          }, 3000);
-        }
+    const payload = {
+      [storageKey]: apiKey,
+      defaultSummaryType: selectedFormat,
+      aiProvider: selectedProvider,
+    };
+
+    chrome.storage.sync.set(payload, () => {
+      updateBadge(true);
+      if (successMessage) {
+        successMessage.style.display = "inline-flex";
+        setTimeout(() => {
+          successMessage.style.display = "none";
+        }, 3000);
       }
-    );
+    });
   }
 
   saveButton.addEventListener("click", saveSettings);
