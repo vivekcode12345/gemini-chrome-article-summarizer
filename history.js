@@ -14,7 +14,7 @@ function getFavoritesKey() {
   return FAVORITES_STORAGE_KEY;
 }
 
-async function loadHistory() {
+export async function loadHistory() {
   return new Promise((resolve) => {
     chrome.storage.local.get([getStorageKey()], (result) => {
       resolve(Array.isArray(result[getStorageKey()]) ? result[getStorageKey()] : []);
@@ -22,7 +22,7 @@ async function loadHistory() {
   });
 }
 
-async function loadFavorites() {
+export async function loadFavorites() {
   return new Promise((resolve) => {
     chrome.storage.local.get([getFavoritesKey()], (result) => {
       resolve(Array.isArray(result[getFavoritesKey()]) ? result[getFavoritesKey()] : []);
@@ -30,7 +30,7 @@ async function loadFavorites() {
   });
 }
 
-async function saveHistoryItem({ url, title, summary, mode, providerLabel }) {
+export async function saveHistoryItem({ url, title, summary, mode, providerLabel }) {
   const history = await loadHistory();
   const favorites = await loadFavorites();
   const item = {
@@ -53,7 +53,7 @@ async function saveHistoryItem({ url, title, summary, mode, providerLabel }) {
   });
 }
 
-async function toggleFavorite(itemId) {
+export async function toggleFavorite(itemId) {
   const history = await loadHistory();
   const index = history.findIndex((item) => item.id === itemId);
   if (index === -1) return;
@@ -89,7 +89,7 @@ async function toggleFavorite(itemId) {
   return updatedItem;
 }
 
-async function deleteHistoryItem(itemId) {
+export async function deleteHistoryItem(itemId) {
   const history = await loadHistory();
   const next = history.filter((item) => item.id !== itemId);
   const favorites = await loadFavorites();
@@ -105,7 +105,7 @@ async function deleteHistoryItem(itemId) {
   ]);
 }
 
-async function clearHistory() {
+export async function clearHistory() {
   await Promise.all([
     new Promise((resolve) => {
       chrome.storage.local.set({ [getStorageKey()]: [] }, resolve);

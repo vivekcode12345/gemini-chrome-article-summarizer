@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Settings • AI Article Summary</title>
+  <script>
+    try {
+      const saved = localStorage.getItem("ai-summarizer-theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    } catch (e) {}
+  </script>
   <style>
     :root {
       --bg: #f8fafc;
@@ -45,6 +53,43 @@
         --danger-bg: rgba(239, 68, 68, 0.15);
         --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
       }
+    }
+
+    /* Manual theme override (takes precedence over system preference) */
+    html[data-theme="light"] {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --border: #e2e8f0;
+      --border-focus: #3b82f6;
+      --success: #10b981;
+      --success-bg: #ecfdf5;
+      --warning: #f59e0b;
+      --warning-bg: #fffbeb;
+      --danger: #ef4444;
+      --danger-bg: #fef2f2;
+      --shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.08);
+    }
+
+    html[data-theme="dark"] {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --border: #1f2937;
+      --border-focus: #60a5fa;
+      --success: #34d399;
+      --success-bg: rgba(16, 185, 129, 0.15);
+      --warning: #fbbf24;
+      --warning-bg: rgba(245, 158, 11, 0.15);
+      --danger: #f87171;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4);
     }
 
     * {
@@ -354,9 +399,44 @@
       align-items: center;
       gap: 6px;
     }
+
+    /* Floating success toast shown after Save */
+    #save-toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-12px);
+      background: #065f46;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: calc(100% - 40px);
+    }
+
+    #save-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .btn-save:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      transform: none;
+    }
   </style>
 </head>
 <body>
+  <div id="save-toast" role="status" aria-live="polite">✓ Successfully updated!</div>
   <div class="settings-container">
     <!-- Header -->
     <header class="header">
@@ -392,6 +472,30 @@
           <input type="radio" name="ai-provider" value="anthropic" />
           <div class="option-title">Anthropic</div>
           <div class="option-sub">claude-3-5-haiku</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Appearance -->
+    <div class="form-group">
+      <div class="label-row">
+        <label>Appearance</label>
+      </div>
+      <div class="options-grid" id="theme-grid">
+        <div class="option-card" data-value="system">
+          <input type="radio" name="theme" value="system" />
+          <div class="option-title">🖥️ System</div>
+          <div class="option-sub">Follow OS</div>
+        </div>
+        <div class="option-card" data-value="light">
+          <input type="radio" name="theme" value="light" />
+          <div class="option-title">☀️ Light</div>
+          <div class="option-sub">Light mode</div>
+        </div>
+        <div class="option-card" data-value="dark">
+          <input type="radio" name="theme" value="dark" />
+          <div class="option-title">🌙 Dark</div>
+          <div class="option-sub">Dark mode</div>
         </div>
       </div>
     </div>

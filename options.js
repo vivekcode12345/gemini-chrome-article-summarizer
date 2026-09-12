@@ -15,6 +15,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let selectedProvider = "gemini";
   let selectedFormat = "brief";
+  let selectedTheme = "system";
+
+  const THEME_SYNC_KEY = "theme";
+  const THEME_LOCAL_MIRROR_KEY = "ai-summarizer-theme";
+
+  function applyTheme(theme) {
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.setAttribute("data-theme", theme);
+      try {
+        localStorage.setItem(THEME_LOCAL_MIRROR_KEY, theme);
+      } catch (e) {}
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+      try {
+        localStorage.removeItem(THEME_LOCAL_MIRROR_KEY);
+      } catch (e) {}
+    }
+  }
+
+  function selectTheme(theme, persist = true) {
+    selectedTheme = theme === "light" || theme === "dark" ? theme : "system";
+    document.querySelectorAll("#theme-grid .option-card").forEach((card) => {
+      const isSelected = card.getAttribute("data-value") === selectedTheme;
+      card.classList.toggle("selected", isSelected);
+      const radio = card.querySelector("input[type='radio']");
+      if (radio) radio.checked = isSelected;
+    });
+    applyTheme(selectedTheme);
+    if (persist) {
+      try {
+        chrome.storage.sync.set({ [THEME_SYNC_KEY]: selectedTheme });
+      } catch (e) {}
+    }
+  }
+
+  document.querySelectorAll("#theme-grid .option-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      selectTheme(card.getAttribute("data-value"));
+    });
+  });
 
   const PROVIDER_HELPERS = {
     gemini: {
@@ -117,8 +157,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load saved settings
   chrome.storage.sync.get(
-    ["geminiApiKey", "openaiApiKey", "anthropicApiKey", "defaultSummaryType", "aiProvider"],
+    ["geminiApiKey", "openaiApiKey", "anthropicApiKey", "defaultSummaryType", "aiProvider", "theme"],
     (result) => {
+      if (result.theme === "light" || result.theme === "dark") {
+        selectTheme(result.theme, false);
+      } else {
+        selectTheme("system", false);
+      }
       if (result.aiProvider) {
         selectedProvider = result.aiProvider;
       }
@@ -187,6 +232,43 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Floating toast + footer message for save feedback
+  let toastTimer = null;
+  function showSaveSuccess(message = "✓ Successfully updated! Opening extension…") {
+    const floatingToast = document.getElementById("save-toast");
+    if (floatingToast) {
+      floatingToast.textContent = message;
+      floatingToast.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+    }
+    if (successMessage) {
+      successMessage.textContent = "✓ Successfully updated!";
+      successMessage.style.display = "inline-flex";
+    }
+  }
+
+  function hideSaveSuccess() {
+    const floatingToast = document.getElementById("save-toast");
+    if (floatingToast) floatingToast.classList.remove("show");
+    if (successMessage) successMessage.style.display = "none";
+  }
+
+  async function openExtensionPopup() {
+    // 1) Ask background service worker to open the action popup
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "OPEN_POPUP" });
+      if (res?.ok) return true;
+    } catch (e) {}
+    // 2) Try directly (works in newer Chrome when called with user gesture)
+    try {
+      if (chrome.action?.openPopup) {
+        await chrome.action.openPopup();
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   // Save settings
   function saveSettings() {
     const apiKey = apiKeyInput.value.trim();
@@ -201,16 +283,33 @@ document.addEventListener("DOMContentLoaded", () => {
       [storageKey]: apiKey,
       defaultSummaryType: selectedFormat,
       aiProvider: selectedProvider,
+      theme: selectedTheme,
     };
+
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.textContent = "Saving…";
+    }
 
     chrome.storage.sync.set(payload, () => {
       updateBadge(true);
-      if (successMessage) {
-        successMessage.style.display = "inline-flex";
-        setTimeout(() => {
-          successMessage.style.display = "none";
-        }, 3000);
-      }
+      showSaveSuccess();
+
+      // Give the user a moment to see the success message, then open the extension
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(async () => {
+        await openExtensionPopup();
+        // Close the Options tab so the user lands back on their article.
+        // If openPopup succeeded this is seamless; otherwise they can click the toolbar icon.
+        try {
+          window.close();
+        } catch (e) {}
+        if (saveButton) {
+          saveButton.disabled = false;
+          saveButton.textContent = "Save Settings";
+        }
+        setTimeout(hideSaveSuccess, 1500);
+      }, 1200);
     });
   }
 

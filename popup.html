@@ -4,6 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Article Summary</title>
+  <script>
+    // Apply saved theme synchronously to avoid flash (mirrored in localStorage by popup.js/options.js)
+    try {
+      const saved = localStorage.getItem("ai-summarizer-theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    } catch (e) {}
+  </script>
 
   <style>
     :root {
@@ -60,6 +69,57 @@
         --code-bg: #1f2937;
         --code-text: #f43f5e;
       }
+    }
+
+    /* Manual theme override (takes precedence over system preference) */
+    html[data-theme="light"] {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-subtle: #94a3b8;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-subtle: #eff6ff;
+      --border: #e2e8f0;
+      --border-focus: #3b82f6;
+      --success: #10b981;
+      --success-bg: #ecfdf5;
+      --warning: #f59e0b;
+      --warning-bg: #fffbeb;
+      --danger: #ef4444;
+      --danger-bg: #fef2f2;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+      --skeleton-start: #f1f5f9;
+      --skeleton-mid: #e2e8f0;
+      --code-bg: #f1f5f9;
+      --code-text: #be123c;
+    }
+
+    html[data-theme="dark"] {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --text-subtle: #6b7280;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --primary-subtle: rgba(59, 130, 246, 0.15);
+      --border: #1f2937;
+      --border-focus: #60a5fa;
+      --success: #34d399;
+      --success-bg: rgba(16, 185, 129, 0.15);
+      --warning: #fbbf24;
+      --warning-bg: rgba(245, 158, 11, 0.15);
+      --danger: #f87171;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.4);
+      --skeleton-start: #1f2937;
+      --skeleton-mid: #374151;
+      --code-bg: #1f2937;
+      --code-text: #f43f5e;
     }
 
     * {
@@ -864,6 +924,22 @@
         <span class="status-dot"></span>
         Gemini 3.6 Flash
       </span>
+      <button id="theme-btn" class="icon-btn" title="Toggle light / dark mode" aria-label="Toggle theme">
+        <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+        <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
       <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>

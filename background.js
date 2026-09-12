@@ -12,6 +12,22 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "PING") {
     sendResponse({ status: "OK" });
+    return true;
+  }
+  if (request.type === "OPEN_POPUP") {
+    (async () => {
+      try {
+        if (chrome.action?.openPopup) {
+          await chrome.action.openPopup();
+          sendResponse({ ok: true });
+        } else {
+          sendResponse({ ok: false, error: "openPopup not available" });
+        }
+      } catch (err) {
+        sendResponse({ ok: false, error: err?.message || String(err) });
+      }
+    })();
+    return true;
   }
   return true;
 });

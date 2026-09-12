@@ -14,6 +14,92 @@ let currentHistoryItemId = null;
 let currentHistoryFilter = "all";
 let isHistoryPanelOpen = false;
 
+// Theme (light / dark / system) — persisted in chrome.storage.sync + localStorage mirror for flash-free load
+const THEME_SYNC_KEY = "theme";
+const THEME_LOCAL_MIRROR_KEY = "ai-summarizer-theme";
+
+function getEffectiveTheme() {
+  const override = document.documentElement.getAttribute("data-theme");
+  if (override === "light" || override === "dark") return override;
+  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
+}
+
+function updateThemeIcon(effectiveTheme) {
+  const moonIcon = document.getElementById("theme-icon-moon");
+  const sunIcon = document.getElementById("theme-icon-sun");
+  const themeBtn = document.getElementById("theme-btn");
+  if (!moonIcon || !sunIcon) return;
+  const isDark = effectiveTheme === "dark";
+  moonIcon.style.display = isDark ? "none" : "block";
+  sunIcon.style.display = isDark ? "block" : "none";
+  if (themeBtn) {
+    themeBtn.title = isDark ? "Switch to light mode" : "Switch to dark mode";
+  }
+}
+
+function applyTheme(theme) {
+  if (theme === "light" || theme === "dark") {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem(THEME_LOCAL_MIRROR_KEY, theme);
+    } catch (e) {}
+  } else {
+    // "system" — follow OS preference
+    document.documentElement.removeAttribute("data-theme");
+    try {
+      localStorage.removeItem(THEME_LOCAL_MIRROR_KEY);
+    } catch (e) {}
+  }
+  updateThemeIcon(getEffectiveTheme());
+}
+
+function initTheme() {
+  // Fast path: inline <head> script already applied localStorage mirror, just sync icon
+  updateThemeIcon(getEffectiveTheme());
+
+  try {
+    chrome.storage.sync.get([THEME_SYNC_KEY], (res) => {
+      if (res && (res[THEME_SYNC_KEY] === "light" || res[THEME_SYNC_KEY] === "dark")) {
+        applyTheme(res[THEME_SYNC_KEY]);
+      } else {
+        applyTheme("system");
+      }
+    });
+  } catch (e) {}
+
+  try {
+    chrome.storage.sync.onChanged.addListener((changes) => {
+      if (changes[THEME_SYNC_KEY]) {
+        const next = changes[THEME_SYNC_KEY].newValue;
+        applyTheme(next === "light" || next === "dark" ? next : "system");
+      }
+    });
+  } catch (e) {}
+
+  // Keep icon in sync when OS theme changes while in "system" mode
+  try {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      if (!document.documentElement.getAttribute("data-theme")) {
+        updateThemeIcon(getEffectiveTheme());
+      }
+    };
+    if (typeof media.addEventListener === "function") media.addEventListener("change", onChange);
+    else if (typeof media.addListener === "function") media.addListener(onChange);
+  } catch (e) {}
+}
+
+function toggleTheme() {
+  const next = getEffectiveTheme() === "dark" ? "light" : "dark";
+  applyTheme(next);
+  try {
+    chrome.storage.sync.set({ [THEME_SYNC_KEY]: next });
+  } catch (e) {}
+}
+
 // Escape HTML for XSS safety
 function escapeHtml(text) {
   return text
@@ -591,6 +677,10 @@ async function initApp() {
 
   // Populate active tab context
   initTabContext();
+
+  // Theme toggle (light / dark, defaults to system)
+  initTheme();
+  document.getElementById("theme-btn")?.addEventListener("click", toggleTheme);
 
   // Settings button navigation
   settingsBtn?.addEventListener("click", () => {
