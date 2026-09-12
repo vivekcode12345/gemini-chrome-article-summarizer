@@ -1,12 +1,30 @@
 import { AI_PROVIDERS, getProvider, getSummaryFromProvider } from "./providers.js";
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.sync.get(["geminiApiKey", "openaiApiKey", "anthropicApiKey", "aiProvider"], (result) => {
-    const hasKey = !!(result.geminiApiKey || result.openaiApiKey || result.anthropicApiKey);
-    if (!hasKey) {
-      chrome.runtime.openOptionsPage();
+async function getSettingsWithFallback(keys) {
+  const syncRes = await new Promise((resolve) => {
+    try {
+      chrome.storage.sync.get(keys, (r) => resolve(r || {}));
+    } catch (e) {
+      resolve({});
     }
   });
+  if (keys.some((k) => syncRes?.[k])) return syncRes;
+  try {
+    const localRes = await new Promise((resolve) => {
+      chrome.storage.local.get(keys, (r) => resolve(r || {}));
+    });
+    return { ...(localRes || {}), ...(syncRes || {}) };
+  } catch (e) {
+    return syncRes || {};
+  }
+}
+
+chrome.runtime.onInstalled.addListener(async () => {
+  const result = await getSettingsWithFallback(["geminiApiKey", "openaiApiKey", "anthropicApiKey", "aiProvider"]);
+  const hasKey = !!(result.geminiApiKey || result.openaiApiKey || result.anthropicApiKey);
+  if (!hasKey) {
+    chrome.runtime.openOptionsPage();
+  }
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -91,7 +109,7 @@ chrome.commands.onCommand.addListener(async (command) => {
     return;
   }
 
-  const storage = await chrome.storage.sync.get(["aiProvider", "geminiApiKey", "openaiApiKey", "anthropicApiKey"]);
+  const storage = await getSettingsWithFallback(["aiProvider", "geminiApiKey", "openaiApiKey", "anthropicApiKey", "defaultLanguage"]);
   const providerId = storage.aiProvider || "gemini";
   const provider = AI_PROVIDERS[providerId];
   if (!provider) return;
@@ -108,7 +126,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 
   try {
-    const text = await getSummaryFromProvider(articleText, "brief", providerId, apiKey);
+    const text = await getSummaryFromProvider(articleText, "brief", providerId, apiKey, storage.defaultLanguage || "en");
     const words = text.trim().split(/\s+/).filter(Boolean).length;
     const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text;
     chrome.notifications.create({

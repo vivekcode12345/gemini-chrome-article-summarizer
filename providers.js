@@ -151,26 +151,76 @@ export function getProvider(id) {
   return provider;
 }
 
-export function buildPrompt(summaryType, article) {
-  switch (summaryType) {
-    case "brief":
-      return `You are a professional summarizer. Write a concise summary of the following article in exactly 2-3 clear sentences. Capture the primary thesis and key takeaway. You may use **bold** text for key concepts.\n\nArticle:\n${article}`;
-    case "detailed":
-      return `You are a professional summarizer. Write a comprehensive summary of the following article in 250-400 words. Organize the summary into well-structured paragraphs with clear section headings (###) and use **bold** text for important takeaways, terms, or metrics. Cover all key arguments and context.\n\nArticle:\n${article}`;
-    case "bullets":
-      return `You are a professional summarizer. Summarize the following article into 5-7 key takeaway bullet points. Format each point starting with "- " and use **bold** for the core concept at the start of each bullet point.\n\nArticle:\n${article}`;
-    default:
-      return `You are a professional summarizer. Summarize the following article in clear, natural language with markdown formatting where appropriate.\n\nArticle:\n${article}`;
-  }
+export const SUMMARY_LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "hi", label: "Hindi" },
+  { code: "es", label: "Spanish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "pt", label: "Portuguese" },
+  { code: "it", label: "Italian" },
+  { code: "zh", label: "Chinese (Simplified)" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "ar", label: "Arabic" },
+];
+
+export function getLanguageLabel(code) {
+  const found = SUMMARY_LANGUAGES.find((l) => l.code === code);
+  return found ? found.label : "English";
 }
 
-export async function getSummaryFromProvider(text, summaryType, providerId, apiKey) {
-  const provider = getProvider(providerId);
-  const maxLength = 30000;
-  const article =
-    text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
-  const prompt = buildPrompt(summaryType, article);
+export function buildPrompt(summaryType, article, language = "en") {
+  let base;
+  switch (summaryType) {
+    case "brief":
+      base = `You are a professional summarizer. Write a concise summary of the following article in exactly 2-3 clear sentences. Capture the primary thesis and key takeaway. You may use **bold** text for key concepts.\n\nArticle:\n${article}`;
+      break;
+    case "detailed":
+      base = `You are a professional summarizer. Write a comprehensive summary of the following article in 250-400 words. Organize the summary into well-structured paragraphs with clear section headings (###) and use **bold** text for important takeaways, terms, or metrics. Cover all key arguments and context.\n\nArticle:\n${article}`;
+      break;
+    case "bullets":
+      base = `You are a professional summarizer. Summarize the following article into 5-7 key takeaway bullet points. Format each point starting with "- " and use **bold** for the core concept at the start of each bullet point.\n\nArticle:\n${article}`;
+      break;
+    default:
+      base = `You are a professional summarizer. Summarize the following article in clear, natural language with markdown formatting where appropriate.\n\nArticle:\n${article}`;
+      break;
+  }
+  // Default is English — keep the prompt byte-identical for English so
+  // existing behaviour does not change; other languages get an instruction.
+  if (language && language !== "en") {
+    return `Write the entire summary in ${getLanguageLabel(language)}. Keep markdown formatting (**, ###, -) unchanged.\n\n${base}`;
+  }
+  return base;
+}
 
+export const MULTI_TAB_MAX_LENGTH = 30000;
+
+// Build a combined prompt from multiple tab sources.
+// sources: [{ title, url, text }] — each text is truncated to a fair share
+// of the total budget so one long tab can't starve the others.
+export function buildMultiTabPrompt(summaryType, sources, language = "en") {
+  const usable = (Array.isArray(sources) ? sources : []).filter(
+    (s) => s && typeof s.text === "string" && s.text.trim().length >= 100
+  );
+  const n = Math.max(usable.length, 1);
+  const perTab = Math.floor(MULTI_TAB_MAX_LENGTH / n);
+  const sections = usable.map((s, i) => {
+    const title = (s.title || `Tab ${i + 1}`).trim() || `Tab ${i + 1}`;
+    const url = (s.url || "").trim();
+    let text = s.text.trim();
+    if (text.length > perTab) text = text.substring(0, perTab) + "...";
+    return `--- SOURCE ${i + 1}/${usable.length}: ${title}${url ? ` (${url})` : ""} ---\n${text}`;
+  });
+  const combined = sections.join("\n\n");
+  const framing =
+    `You are given article text extracted from ${usable.length} browser tabs. ` +
+    `Summarize them together as one coherent summary. Where the tabs cover different topics, ` +
+    `organize the summary per source; where they overlap, synthesize and note agreements or differences.`;
+  return buildPrompt(summaryType, `${framing}\n\n${combined}`, language);
+}
+
+async function postPrompt(provider, apiKey, prompt) {
   const endpoint = provider.buildEndpoint(provider.defaultModel, apiKey);
   const body = provider.buildRequest(prompt, provider.defaultModel);
   const headers = {
@@ -199,19 +249,7 @@ export async function getSummaryFromProvider(text, summaryType, providerId, apiK
   return provider.parseResponse(data);
 }
 
-export async function* streamSummaryFromProvider(text, summaryType, providerId, apiKey) {
-  const provider = getProvider(providerId);
-  const maxLength = 30000;
-  const article =
-    text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
-  const prompt = buildPrompt(summaryType, article);
-
-  if (!provider.supportsStreaming) {
-    const full = await getSummaryFromProvider(text, summaryType, providerId, apiKey);
-    yield full;
-    return;
-  }
-
+async function* streamPrompt(provider, apiKey, prompt) {
   const endpoint = provider.buildStreamEndpoint(provider.defaultModel, apiKey);
   const body = provider.buildStreamRequest(prompt, provider.defaultModel);
   const headers = {
@@ -264,4 +302,40 @@ export async function* streamSummaryFromProvider(text, summaryType, providerId, 
       }
     }
   }
+}
+
+export async function getSummaryFromProvider(text, summaryType, providerId, apiKey, language = "en") {
+  const provider = getProvider(providerId);
+  const maxLength = 30000;
+  const article =
+    text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+  const prompt = buildPrompt(summaryType, article, language);
+  return postPrompt(provider, apiKey, prompt);
+}
+
+export async function* streamSummaryFromProvider(text, summaryType, providerId, apiKey, language = "en") {
+  const provider = getProvider(providerId);
+  if (!provider.supportsStreaming) {
+    yield await getSummaryFromProvider(text, summaryType, providerId, apiKey, language);
+    return;
+  }
+  const maxLength = 30000;
+  const article =
+    text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+  const prompt = buildPrompt(summaryType, article, language);
+  yield* streamPrompt(provider, apiKey, prompt);
+}
+
+export async function getMultiTabSummaryFromProvider(sources, summaryType, providerId, apiKey, language = "en") {
+  const provider = getProvider(providerId);
+  return postPrompt(provider, apiKey, buildMultiTabPrompt(summaryType, sources, language));
+}
+
+export async function* streamMultiTabSummaryFromProvider(sources, summaryType, providerId, apiKey, language = "en") {
+  const provider = getProvider(providerId);
+  if (!provider.supportsStreaming) {
+    yield await getMultiTabSummaryFromProvider(sources, summaryType, providerId, apiKey, language);
+    return;
+  }
+  yield* streamPrompt(provider, apiKey, buildMultiTabPrompt(summaryType, sources, language));
 }

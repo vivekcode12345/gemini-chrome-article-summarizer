@@ -30,7 +30,7 @@ export async function loadFavorites() {
   });
 }
 
-export async function saveHistoryItem({ url, title, summary, mode, providerLabel }) {
+export async function saveHistoryItem({ url, title, summary, mode, providerLabel, language, tabs }) {
   const history = await loadHistory();
   const favorites = await loadFavorites();
   const item = {
@@ -40,6 +40,8 @@ export async function saveHistoryItem({ url, title, summary, mode, providerLabel
     summary: typeof summary === "string" ? summary : "",
     mode: mode || "brief",
     providerLabel: providerLabel || "",
+    language: language || "en",
+    tabs: Array.isArray(tabs) ? tabs : undefined,
     createdAt: Date.now(),
     isFavorite: favorites.some((fav) => fav.url === (url || "") && fav.summary === summary),
   };
@@ -71,6 +73,8 @@ export async function toggleFavorite(itemId) {
       summary: updatedItem.summary,
       mode: updatedItem.mode,
       providerLabel: updatedItem.providerLabel,
+      language: updatedItem.language || "en",
+      tabs: updatedItem.tabs,
       createdAt: updatedItem.createdAt,
     });
   } else {

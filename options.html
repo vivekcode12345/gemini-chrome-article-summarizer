@@ -4,14 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Settings • AI Article Summary</title>
-  <script>
-    try {
-      const saved = localStorage.getItem("ai-summarizer-theme");
-      if (saved === "light" || saved === "dark") {
-        document.documentElement.setAttribute("data-theme", saved);
-      }
-    } catch (e) {}
-  </script>
+  <script src="theme-preload.js"></script>
   <style>
     :root {
       --bg: #f8fafc;
@@ -433,6 +426,25 @@
       cursor: not-allowed;
       transform: none;
     }
+
+    .lang-dropdown {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-main);
+      background: var(--card-bg);
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.18s ease;
+    }
+
+    .lang-dropdown:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
   </style>
 </head>
 <body>
@@ -550,7 +562,7 @@
       <div class="label-row">
         <label>Default Summary Format</label>
       </div>
-      <div class="options-grid">
+      <div class="options-grid" id="format-grid">
         <div class="option-card selected" data-value="brief">
           <input type="radio" name="default-type" value="brief" checked />
           <div class="option-title">⚡ Brief</div>
@@ -566,6 +578,17 @@
           <div class="option-title">📌 Key Points</div>
           <div class="option-sub">Bullet Points</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Default Language -->
+    <div class="form-group">
+      <div class="label-row">
+        <label for="default-language">Default Summary Language</label>
+      </div>
+      <select id="default-language" class="lang-dropdown" aria-label="Default summary language"></select>
+      <div class="helper-box">
+        Summaries in the popup default to English. Change this to get summaries in another language by default — you can still switch per summary in the popup.
       </div>
     </div>
 

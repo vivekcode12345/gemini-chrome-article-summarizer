@@ -1,8 +1,9 @@
-import { getProvider } from "./providers.js";
+import { getProvider, SUMMARY_LANGUAGES } from "./providers.js";
 
 document.addEventListener("DOMContentLoaded", () => {
   const apiKeyInput = document.getElementById("api-key");
   const saveButton = document.getElementById("save-button");
+  const defaultLangSelect = document.getElementById("default-language");
   const successMessage = document.getElementById("success-message");
   const toggleVisibilityBtn = document.getElementById("toggle-visibility");
   const keyStatusBadge = document.getElementById("key-status-badge");
@@ -16,6 +17,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let selectedProvider = "gemini";
   let selectedFormat = "brief";
   let selectedTheme = "system";
+  let selectedLanguage = "en";
+  // Tracks whether the user has typed in the key field since the last
+  // provider switch / initial load, so async storage reads never wipe typing.
+  let isApiKeyDirty = false;
 
   const THEME_SYNC_KEY = "theme";
   const THEME_LOCAL_MIRROR_KEY = "ai-summarizer-theme";
@@ -45,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
     applyTheme(selectedTheme);
     if (persist) {
       try {
-        chrome.storage.sync.set({ [THEME_SYNC_KEY]: selectedTheme });
+        storageSet({ [THEME_SYNC_KEY]: selectedTheme }, () => {});
       } catch (e) {}
     }
   }
@@ -94,6 +99,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function selectProvider(providerId) {
     selectedProvider = providerId;
+    // Switching provider means we want to show that provider's saved key,
+    // so allow the async load to populate the field.
+    isApiKeyDirty = false;
     providerCards.forEach((card) => {
       const isSelected = card.getAttribute("data-value") === providerId;
       card.classList.toggle("selected", isSelected);
@@ -116,10 +124,79 @@ document.addEventListener("DOMContentLoaded", () => {
     return "geminiApiKey";
   }
 
+  // Storage helpers: write to sync AND local (sync can be disabled/unsigned),
+  // read from sync first with local fallback.
+  function storageGet(keys, callback) {
+    if (chrome?.storage?.sync) {
+      try {
+        chrome.storage.sync.get(keys, (syncRes) => {
+          if (chrome.runtime.lastError) {
+            console.warn("sync.get failed, trying local:", chrome.runtime.lastError.message);
+            chrome.storage.local.get(keys, (localRes) => callback(localRes || {}));
+            return;
+          }
+          const hasValue = keys.some((k) => syncRes && syncRes[k]);
+          if (hasValue) {
+            callback(syncRes || {});
+          } else if (chrome?.storage?.local) {
+            chrome.storage.local.get(keys, (localRes) => {
+              const merged = { ...(localRes || {}), ...(syncRes || {}) };
+              // Prefer whichever actually has values
+              callback(Object.keys(localRes || {}).length ? merged : (syncRes || {}));
+            });
+          } else {
+            callback(syncRes || {});
+          }
+        });
+        return;
+      } catch (err) {
+        console.warn("sync.get crashed, trying local:", err);
+      }
+    }
+    if (chrome?.storage?.local) {
+      chrome.storage.local.get(keys, (localRes) => callback(localRes || {}));
+    } else {
+      callback({});
+    }
+  }
+
+  function storageSet(obj, callback) {
+    let pending = 0;
+    let lastErr = null;
+    const done = (err) => {
+      if (err) lastErr = err;
+      pending -= 1;
+      if (pending <= 0 && callback) callback(lastErr);
+    };
+    if (chrome?.storage?.sync) {
+      pending += 1;
+      try {
+        chrome.storage.sync.set(obj, () => done(chrome.runtime.lastError ? new Error(chrome.runtime.lastError.message) : null));
+      } catch (err) {
+        done(err);
+      }
+    }
+    if (chrome?.storage?.local) {
+      pending += 1;
+      try {
+        chrome.storage.local.set(obj, () => done(chrome.runtime.lastError ? new Error(chrome.runtime.lastError.message) : null));
+      } catch (err) {
+        done(err);
+      }
+    }
+    if (pending === 0 && callback) callback(new Error("No extension storage available"));
+  }
+
   function loadApiKeyForProvider(providerId) {
     const storageKey = getStorageKeyForProvider(providerId);
-    chrome.storage.sync.get([storageKey], (result) => {
-      const value = result[storageKey];
+    if (!chrome?.storage) {
+      console.error("chrome.storage unavailable — open Options via the extension, not as a file.");
+      return;
+    }
+    storageGet([storageKey], (result) => {
+      // Never overwrite what the user just typed.
+      if (isApiKeyDirty) return;
+      const value = result?.[storageKey];
       if (apiKeyInput) apiKeyInput.value = value || "";
       updateBadge(!!value);
     });
@@ -143,8 +220,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Default summary format card selection
-  const formatCards = Array.from(optionCards).filter((card) => !providerCards.includes(card));
+  // Default summary format card selection (scoped to #format-grid only,
+  // so theme cards are never affected)
+  const formatCards = document.querySelectorAll("#format-grid .option-card");
   formatCards.forEach((card) => {
     card.addEventListener("click", () => {
       formatCards.forEach((c) => c.classList.remove("selected"));
@@ -155,39 +233,86 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Load saved settings
-  chrome.storage.sync.get(
-    ["geminiApiKey", "openaiApiKey", "anthropicApiKey", "defaultSummaryType", "aiProvider", "theme"],
-    (result) => {
-      if (result.theme === "light" || result.theme === "dark") {
-        selectTheme(result.theme, false);
-      } else {
-        selectTheme("system", false);
-      }
-      if (result.aiProvider) {
-        selectedProvider = result.aiProvider;
-      }
-      selectProvider(selectedProvider);
+  // Default language dropdown (populated from shared SUMMARY_LANGUAGES)
+  if (defaultLangSelect && Array.isArray(SUMMARY_LANGUAGES)) {
+    defaultLangSelect.innerHTML = SUMMARY_LANGUAGES.map(
+      (l) => `<option value="${l.code}">${l.label}</option>`
+    ).join("");
+    defaultLangSelect.value = "en";
+    defaultLangSelect.addEventListener("change", () => {
+      selectedLanguage = defaultLangSelect.value || "en";
+    });
+  }
 
-      if (result.defaultSummaryType) {
-        selectedFormat = result.defaultSummaryType;
-        const targetCard = document.querySelector(`.option-card[data-value="${selectedFormat}"]:not(#provider-grid .option-card)`);
-        if (targetCard) {
-          optionCards.forEach((c) => {
-            if (!providerCards.contains(c)) c.classList.remove("selected");
-          });
-          targetCard.classList.add("selected");
-          const radio = targetCard.querySelector("input[type='radio']");
-          if (radio) radio.checked = true;
-        }
+  // Load saved settings — guarded so a missing chrome.storage API
+  // can never prevent the buttons below from working.
+  function loadSavedSettings() {
+    if (!chrome?.storage) {
+      console.error("chrome.storage unavailable. Open Options via chrome://extensions > Details > Extension options, not as a file.");
+      selectTheme("system", false);
+      selectProviderWithoutLoad("gemini");
+      if (testFeedback) {
+        testFeedback.textContent = "Extension storage unavailable. Reload the extension and open Options from the toolbar.";
+        testFeedback.className = "test-feedback error";
       }
+      return;
     }
-  );
+    try {
+      storageGet(
+        ["geminiApiKey", "openaiApiKey", "anthropicApiKey", "defaultSummaryType", "aiProvider", "theme", "defaultLanguage"],
+        (result) => {
+          const res = result || {};
+          if (res.defaultLanguage && defaultLangSelect) {
+            const valid = SUMMARY_LANGUAGES.some((l) => l.code === res.defaultLanguage)
+              ? res.defaultLanguage
+              : "en";
+            selectedLanguage = valid;
+            defaultLangSelect.value = valid;
+          }
+          if (res.theme === "light" || res.theme === "dark") {
+            selectTheme(res.theme, false);
+          } else {
+            selectTheme("system", false);
+          }
+          if (res.aiProvider) {
+            selectedProvider = res.aiProvider;
+          }
+          selectProvider(selectedProvider);
+
+          if (res.defaultSummaryType) {
+            selectedFormat = res.defaultSummaryType;
+            const targetCard = document.querySelector(`#format-grid .option-card[data-value="${selectedFormat}"]`);
+            if (targetCard) {
+              formatCards.forEach((c) => c.classList.remove("selected"));
+              targetCard.classList.add("selected");
+              const radio = targetCard.querySelector("input[type='radio']");
+              if (radio) radio.checked = true;
+            }
+          }
+        }
+      );
+    } catch (err) {
+      console.error("Load settings crashed:", err);
+    }
+  }
+
+  // Select provider + UI without triggering an async key load
+  // (used when storage is unavailable).
+  function selectProviderWithoutLoad(providerId) {
+    selectedProvider = providerId;
+    providerCards.forEach((card) => {
+      const isSelected = card.getAttribute("data-value") === providerId;
+      card.classList.toggle("selected", isSelected);
+      const radio = card.querySelector("input[type='radio']");
+      if (radio) radio.checked = isSelected;
+    });
+    applyProviderMeta(providerId);
+  }
 
   // Test Connection
   testConnBtn?.addEventListener("click", async () => {
-    const key = apiKeyInput.value.trim();
-    if (!key) {
+    const key = (apiKeyInput?.value || "").trim();
+    if (testFeedback && !key) {
       testFeedback.textContent = "Please enter an API key first.";
       testFeedback.className = "test-feedback error";
       return;
@@ -271,6 +396,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Save settings
   function saveSettings() {
+    if (!apiKeyInput || !saveButton) {
+      console.error("Save failed: form elements not found");
+      return;
+    }
     const apiKey = apiKeyInput.value.trim();
     const storageKey = getStorageKeyForProvider(selectedProvider);
 
@@ -284,26 +413,53 @@ document.addEventListener("DOMContentLoaded", () => {
       defaultSummaryType: selectedFormat,
       aiProvider: selectedProvider,
       theme: selectedTheme,
+      defaultLanguage: defaultLangSelect?.value || selectedLanguage || "en",
     };
 
-    if (saveButton) {
-      saveButton.disabled = true;
-      saveButton.textContent = "Saving…";
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving…";
+
+    if (!chrome?.storage) {
+      alert("Extension storage unavailable. Reload the extension in chrome://extensions and open Options from the toolbar.");
+      saveButton.disabled = false;
+      saveButton.textContent = "Save Settings";
+      return;
     }
 
-    chrome.storage.sync.set(payload, () => {
-      updateBadge(true);
-      showSaveSuccess();
+    try {
+      storageSet(payload, (err) => {
+        if (err) {
+          console.error("Save failed:", err.message);
+          alert(`Save failed: ${err.message}`);
+          saveButton.disabled = false;
+          saveButton.textContent = "Save Settings";
+          return;
+        }
+        isApiKeyDirty = false;
+        updateBadge(true);
+        // Verify the write so users can confirm the key persisted
+        storageGet([storageKey, "aiProvider"], (check) => {
+          console.log("Saved. Storage now:", check);
+          if (!check?.[storageKey]) {
+            console.warn("Save verification failed: key not found after write");
+            alert("Warning: key did not persist. Check chrome.storage access.");
+          }
+        });
+        showSaveSuccess("✓ Successfully updated!");
 
-      // Give the user a moment to see the success message, then open the extension
+      // Give the user a moment to see the success message, then try to open the extension.
+      // Only auto-close the tab if the popup actually opened — otherwise stay
+      // so the user can see the ● Key Configured badge.
       if (toastTimer) clearTimeout(toastTimer);
       toastTimer = setTimeout(async () => {
-        await openExtensionPopup();
-        // Close the Options tab so the user lands back on their article.
-        // If openPopup succeeded this is seamless; otherwise they can click the toolbar icon.
-        try {
-          window.close();
-        } catch (e) {}
+        const opened = await openExtensionPopup();
+        if (opened) {
+          try {
+            window.close();
+          } catch (e) {}
+        } else {
+          showSaveSuccess("✓ Successfully updated! Click the toolbar icon to open the extension.");
+        }
         if (saveButton) {
           saveButton.disabled = false;
           saveButton.textContent = "Save Settings";
@@ -311,13 +467,27 @@ document.addEventListener("DOMContentLoaded", () => {
         setTimeout(hideSaveSuccess, 1500);
       }, 1200);
     });
+    } catch (err) {
+      console.error("Save crashed:", err);
+      alert(`Save failed: ${err?.message || err}`);
+      saveButton.disabled = false;
+      saveButton.textContent = "Save Settings";
+    }
   }
 
-  saveButton.addEventListener("click", saveSettings);
+  saveButton?.addEventListener("click", saveSettings);
 
-  apiKeyInput.addEventListener("keydown", (e) => {
+  // Mark the field dirty on any user edit so async loads never wipe typing.
+  apiKeyInput?.addEventListener("input", () => {
+    isApiKeyDirty = true;
+  });
+
+  apiKeyInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       saveSettings();
     }
   });
+
+  // Attach listeners first, then load — so buttons work even if storage fails.
+  loadSavedSettings();
 });

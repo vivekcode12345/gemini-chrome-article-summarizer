@@ -1,4 +1,4 @@
-import { getProvider, getSummaryFromProvider, streamSummaryFromProvider } from "./providers.js";
+import { getProvider, getSummaryFromProvider, streamSummaryFromProvider, streamMultiTabSummaryFromProvider, getMultiTabSummaryFromProvider, SUMMARY_LANGUAGES, getLanguageLabel } from "./providers.js";
 import {
   saveHistoryItem,
   loadHistory,
@@ -341,6 +341,8 @@ async function renderHistoryList() {
           <div class="history-item-meta">
             ${domain ? `<span>${escapeHtml(domain)}</span>` : ""}
             <span>${escapeHtml(item.mode || "brief")}</span>
+            ${Array.isArray(item.tabs) && item.tabs.length > 1 ? `<span>${item.tabs.length} tabs</span>` : ""}
+            ${item.language && item.language !== "en" ? `<span>${escapeHtml(getLanguageLabel(item.language))}</span>` : ""}
             <span>${dateLabel}</span>
           </div>
           <div class="history-item-summary">${escapeHtml(truncateText(item.summary))}</div>
@@ -403,6 +405,11 @@ async function renderHistoryList() {
 async function openHistoryItem(item) {
   currentSummaryRaw = item.summary;
   currentHistoryItemId = item.id;
+  const langSelect = document.getElementById("summary-lang");
+  if (langSelect && item.language) {
+    const valid = SUMMARY_LANGUAGES.some((l) => l.code === item.language) ? item.language : "en";
+    langSelect.value = valid;
+  }
   const resultDiv = document.getElementById("result");
   if (resultDiv) {
     resultDiv.innerHTML = renderMarkdown(item.summary);
@@ -584,6 +591,221 @@ async function getArticleTextFromTab(tabId) {
 }
 
 
+// ==================== MULTI-TAB SUMMARY ====================
+
+// Shared storage read with sync-first / local-fallback (mirrors initApp helper)
+async function getExtensionStorage(keys) {
+  const syncRes = await new Promise((resolve) => {
+    try {
+      chrome.storage.sync.get(keys, (r) => resolve(r || {}));
+    } catch (e) {
+      resolve({});
+    }
+  });
+  if (keys.some((k) => syncRes?.[k])) return syncRes;
+  try {
+    const localRes = await new Promise((resolve) => {
+      chrome.storage.local.get(keys, (r) => resolve(r || {}));
+    });
+    return { ...(localRes || {}), ...(syncRes || {}) };
+  } catch (e) {
+    return syncRes || {};
+  }
+}
+
+function isRestrictedUrl(url) {
+  return (
+    typeof url === "string" &&
+    (url.startsWith("chrome://") ||
+      url.startsWith("chrome-extension://") ||
+      url.startsWith("edge://") ||
+      url.startsWith("about:"))
+  );
+}
+
+function getDomain(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function updateMultitabStatus() {
+  const list = document.getElementById("multitab-list");
+  const status = document.getElementById("multitab-status");
+  const goBtn = document.getElementById("multitab-summarize");
+  if (!list || !status || !goBtn) return;
+  const checked = list.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)').length;
+  status.textContent = checked ? `${checked} selected` : "Select at least 1 tab";
+  goBtn.disabled = checked === 0;
+  goBtn.textContent = checked > 1 ? `Summarize ${checked} tabs` : "Summarize selected";
+}
+
+async function loadMultitabList() {
+  const list = document.getElementById("multitab-list");
+  const status = document.getElementById("multitab-status");
+  if (!list) return;
+  list.innerHTML = `<div class="history-empty">Loading tabs…</div>`;
+  try {
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    const active = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeId = active[0]?.id;
+    if (!tabs.length) {
+      list.innerHTML = `<div class="history-empty">No tabs found.</div>`;
+      return;
+    }
+    list.innerHTML = "";
+    tabs.forEach((tab) => {
+      const restricted = isRestrictedUrl(tab.url);
+      const row = document.createElement("label");
+      row.className = "multitab-item" + (restricted ? " disabled" : "");
+      row.title = restricted ? "Browser internal pages cannot be summarized" : (tab.url || "");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "multitab-checkbox";
+      checkbox.value = String(tab.id);
+      checkbox.disabled = restricted;
+      checkbox.checked = !restricted && tab.id === activeId;
+      checkbox.addEventListener("change", updateMultitabStatus);
+      const textWrap = document.createElement("div");
+      textWrap.className = "multitab-item-text";
+      const titleEl = document.createElement("div");
+      titleEl.className = "multitab-item-title";
+      titleEl.textContent = tab.title || "Untitled";
+      const domainEl = document.createElement("div");
+      domainEl.className = "multitab-item-domain";
+      domainEl.textContent = restricted ? "Restricted page" : getDomain(tab.url || "");
+      textWrap.appendChild(titleEl);
+      textWrap.appendChild(domainEl);
+      row.appendChild(checkbox);
+      row.appendChild(textWrap);
+      list.appendChild(row);
+    });
+  } catch (err) {
+    console.error("Failed to list tabs:", err);
+    if (status) status.textContent = "Could not list tabs.";
+    list.innerHTML = `<div class="history-empty">Could not list tabs.</div>`;
+    return;
+  }
+  updateMultitabStatus();
+}
+
+async function summarizeSelectedTabs() {
+  const list = document.getElementById("multitab-list");
+  const status = document.getElementById("multitab-status");
+  const goBtn = document.getElementById("multitab-summarize");
+  const summarizeBtn = document.getElementById("summarize");
+  const summarizeLabel = document.getElementById("summarize-btn-label");
+  if (!list) return;
+
+  const checkedBoxes = Array.from(
+    list.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')
+  );
+  if (!checkedBoxes.length) {
+    if (status) status.textContent = "Select at least 1 tab.";
+    return;
+  }
+
+  const tabIds = checkedBoxes.map((box) => parseInt(box.value, 10)).filter(Number.isInteger);
+  const allTabs = await chrome.tabs.query({ currentWindow: true });
+  const byId = new Map(allTabs.map((t) => [t.id, t]));
+
+  if (summarizeBtn) summarizeBtn.disabled = true;
+  if (goBtn) goBtn.disabled = true;
+
+  try {
+    const storage = await getExtensionStorage(["geminiApiKey", "openaiApiKey", "anthropicApiKey", "aiProvider"]);
+    const providerId = storage.aiProvider || "gemini";
+    const provider = getProvider(providerId);
+    const apiKey = storage[provider.apiKeyStorageKey];
+
+    if (!apiKey) {
+      showApiKeyMissing();
+      return;
+    }
+
+    const summaryTypeInput = document.getElementById("summary-type");
+    const langSelect = document.getElementById("summary-lang");
+    const currentType = summaryTypeInput ? summaryTypeInput.value : "brief";
+    const currentLang = langSelect?.value || "en";
+
+    // Extract text from each selected tab sequentially
+    const sources = [];
+    const skipped = [];
+    for (let i = 0; i < tabIds.length; i++) {
+      const tab = byId.get(tabIds[i]);
+      if (!tab) continue;
+      if (status) status.textContent = `Extracting ${i + 1}/${tabIds.length}…`;
+      showLoading(`Extracting article text (${i + 1}/${tabIds.length})…`);
+      try {
+        const text = await getArticleTextFromTab(tab.id);
+        sources.push({ title: tab.title || "Untitled", url: tab.url || "", text });
+      } catch (err) {
+        console.warn(`Skipping tab "${tab.title}":`, err.message);
+        skipped.push(tab.title || "Untitled");
+      }
+    }
+
+    if (!sources.length) {
+      showError(
+        skipped.length
+          ? `Could not extract article text from the selected tab(s): ${skipped.join(", ")}.`
+          : "Could not extract article text from the selected tabs."
+      );
+      return;
+    }
+
+    if (status) {
+      status.textContent = skipped.length
+        ? `${sources.length} ready, ${skipped.length} skipped`
+        : `${sources.length} ready — summarizing…`;
+    }
+    showStreamingPlaceholder(provider.label);
+
+    let fullText = "";
+    try {
+      for await (const chunk of streamMultiTabSummaryFromProvider(sources, currentType, providerId, apiKey, currentLang)) {
+        fullText += chunk;
+        appendStreamChunk(chunk);
+      }
+    } catch (streamError) {
+      console.error("Multi-tab streaming failed, falling back:", streamError);
+      fullText = await getMultiTabSummaryFromProvider(sources, currentType, providerId, apiKey, currentLang);
+    }
+
+    if (!fullText.trim()) {
+      throw new Error("No summary returned by provider.");
+    }
+
+    finalizeStream(provider.label);
+
+    const savedItem = await saveHistoryItem({
+      url: sources[0]?.url || "",
+      title: sources.length > 1 ? `Multi-tab summary (${sources.length} tabs)` : sources[0]?.title || "Untitled",
+      summary: currentSummaryRaw,
+      mode: currentType,
+      providerLabel: provider.label,
+      language: currentLang,
+      tabs: sources.map((s) => ({ title: s.title, url: s.url })),
+    });
+    currentHistoryItemId = savedItem.id;
+    await updateFavoriteButtonState(savedItem);
+    if (status) {
+      status.textContent = skipped.length
+        ? `Done (${skipped.length} tab(s) skipped)`
+        : "Done";
+    }
+  } catch (error) {
+    console.error("Multi-tab summarization error:", error);
+    showError(error.message);
+  } finally {
+    if (summarizeBtn) summarizeBtn.disabled = false;
+    updateMultitabStatus();
+    if (summarizeLabel) summarizeLabel.textContent = "Summarize Article";
+  }
+}
+
 // Copy summary to clipboard
 async function copySummaryToClipboard() {
   const copyBtn = document.getElementById("copy-btn");
@@ -659,10 +881,27 @@ async function initApp() {
   let currentProviderId = "gemini";
   let currentProviderLabel = "Gemini 3.6 Flash";
 
-  async function loadProviderMeta() {
-    const storage = await new Promise((resolve) => {
-      chrome.storage.sync.get(["aiProvider"], resolve);
+  async function getExtensionStorage(keys) {
+    const syncRes = await new Promise((resolve) => {
+      try {
+        chrome.storage.sync.get(keys, (r) => resolve(r || {}));
+      } catch (e) {
+        resolve({});
+      }
     });
+    if (keys.some((k) => syncRes?.[k])) return syncRes;
+    try {
+      const localRes = await new Promise((resolve) => {
+        chrome.storage.local.get(keys, (r) => resolve(r || {}));
+      });
+      return { ...(localRes || {}), ...(syncRes || {}) };
+    } catch (e) {
+      return syncRes || {};
+    }
+  }
+
+  async function loadProviderMeta() {
+    const storage = await getExtensionStorage(["aiProvider"]);
     const providerId = storage.aiProvider || "gemini";
     currentProviderId = providerId;
     const provider = getProvider(providerId);
@@ -681,6 +920,35 @@ async function initApp() {
   // Theme toggle (light / dark, defaults to system)
   initTheme();
   document.getElementById("theme-btn")?.addEventListener("click", toggleTheme);
+
+  // Multi-tab picker toggle + actions
+  const multitabToggle = document.getElementById("multitab-toggle");
+  const multitabPanel = document.getElementById("multitab-panel");
+  const multitabList = document.getElementById("multitab-list");
+  let isMultitabOpen = false;
+  const setMultitabOpen = async (open) => {
+    isMultitabOpen = open;
+    if (multitabPanel) multitabPanel.style.display = open ? "block" : "none";
+    if (multitabToggle) {
+      multitabToggle.classList.toggle("open", open);
+      multitabToggle.setAttribute("aria-expanded", String(open));
+    }
+    if (open) await loadMultitabList();
+  };
+  multitabToggle?.addEventListener("click", () => setMultitabOpen(!isMultitabOpen));
+  document.getElementById("multitab-select-all")?.addEventListener("click", () => {
+    multitabList?.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach((box) => {
+      box.checked = true;
+    });
+    updateMultitabStatus();
+  });
+  document.getElementById("multitab-clear")?.addEventListener("click", () => {
+    multitabList?.querySelectorAll('input[type="checkbox"]').forEach((box) => {
+      box.checked = false;
+    });
+    updateMultitabStatus();
+  });
+  document.getElementById("multitab-summarize")?.addEventListener("click", summarizeSelectedTabs);
 
   // Settings button navigation
   settingsBtn?.addEventListener("click", () => {
@@ -725,6 +993,36 @@ async function initApp() {
     });
   });
 
+  // Language selector: populate, restore (default English), persist
+  const langSelect = document.getElementById("summary-lang");
+  if (langSelect) {
+    langSelect.innerHTML = SUMMARY_LANGUAGES.map(
+      (l) => `<option value="${l.code}">${l.label}</option>`
+    ).join("");
+    langSelect.value = "en";
+
+    const applyLang = (code) => {
+      const valid = SUMMARY_LANGUAGES.some((l) => l.code === code) ? code : "en";
+      langSelect.value = valid;
+    };
+
+    // Sync default first, then last-selected override
+    try {
+      chrome.storage.sync.get(["defaultLanguage"], (syncRes) => {
+        if (syncRes?.defaultLanguage) applyLang(syncRes.defaultLanguage);
+        chrome.storage.local.get(["lastSelectedLanguage"], (localRes) => {
+          if (localRes?.lastSelectedLanguage) applyLang(localRes.lastSelectedLanguage);
+        });
+      });
+    } catch (e) {}
+
+    langSelect.addEventListener("change", () => {
+      try {
+        chrome.storage.local.set({ lastSelectedLanguage: langSelect.value });
+      } catch (e) {}
+    });
+  }
+
   // Restore preferred or last selected summary type
   chrome.storage.sync.get(["defaultSummaryType"], (syncRes) => {
     const preferred = syncRes.defaultSummaryType;
@@ -760,9 +1058,7 @@ async function initApp() {
     if (shortcutKbd) shortcutKbd.style.opacity = "0.3";
 
     try {
-      const storage = await new Promise((resolve) => {
-        chrome.storage.sync.get(["geminiApiKey", "openaiApiKey", "anthropicApiKey", "aiProvider"], resolve);
-      });
+      const storage = await getExtensionStorage(["geminiApiKey", "openaiApiKey", "anthropicApiKey", "aiProvider"]);
       const providerId = storage.aiProvider || "gemini";
       const provider = getProvider(providerId);
       const apiKey = storage[provider.apiKeyStorageKey];
@@ -798,18 +1094,20 @@ async function initApp() {
       const articleText = await getArticleTextFromTab(activeTab.id);
 
       const currentType = summaryTypeInput ? summaryTypeInput.value : "brief";
+      const langSelect = document.getElementById("summary-lang");
+      const currentLang = langSelect?.value || "en";
       showStreamingPlaceholder(provider.label);
 
       let fullText = "";
       try {
-        for await (const chunk of streamSummaryFromProvider(articleText, currentType, providerId, apiKey)) {
+        for await (const chunk of streamSummaryFromProvider(articleText, currentType, providerId, apiKey, currentLang)) {
           fullText += chunk;
           appendStreamChunk(chunk);
         }
       } catch (streamError) {
         console.error("Streaming failed, falling back to non-streaming:", streamError);
         try {
-          fullText = await getSummaryFromProvider(articleText, currentType, providerId, apiKey);
+          fullText = await getSummaryFromProvider(articleText, currentType, providerId, apiKey, currentLang);
         } catch (fallbackError) {
           throw fallbackError;
         }
@@ -831,6 +1129,7 @@ async function initApp() {
         summary: currentSummaryRaw,
         mode: currentType,
         providerLabel: provider.label,
+        language: currentLang,
       });
       currentHistoryItemId = savedItem.id;
       await updateFavoriteButtonState(savedItem);
